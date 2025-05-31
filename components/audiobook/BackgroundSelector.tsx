@@ -15,7 +15,7 @@ interface BackgroundSelectorProps {
   onPreviewEffect?: (effectId: string) => void;
 }
 
-export default function BackgroundSelector({ 
+export default function BackgroundSelector({
   effects,
   selectedEffectId,
   onSelectEffect,
@@ -23,15 +23,16 @@ export default function BackgroundSelector({
 }: BackgroundSelectorProps) {
   const [playingEffectId, setPlayingEffectId] = useState<string | null>(null);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
-  
+  const [isPlayButtonPressed, setIsPlayButtonPressed] = useState(false);
+
   const effectCategories = [
     { id: 'music', title: 'Background Music' },
     { id: 'ambient', title: 'Ambient Sounds' },
-    { id: 'sound_effect', title: 'Sound Effects' }
+    { id: 'sound_effect', title: 'Sound Effects' },
   ];
-  
+
   const getEffectsByCategory = (category: string) => {
-    return effects.filter(effect => effect.category === category);
+    return effects.filter((effect) => effect.category === category);
   };
 
   const stopCurrentSound = async () => {
@@ -62,7 +63,7 @@ export default function BackgroundSelector({
 
       const { sound: newSound } = await Audio.Sound.createAsync(
         { uri: previewUrl },
-        { 
+        {
           shouldPlay: true,
           volume: audioEffects.getVolume(),
         }
@@ -72,7 +73,7 @@ export default function BackgroundSelector({
       setPlayingEffectId(effectId);
 
       // Handle playback completion
-      newSound.setOnPlaybackStatusUpdate(status => {
+      newSound.setOnPlaybackStatusUpdate((status) => {
         if (status.isLoaded && status.didJustFinish) {
           setPlayingEffectId(null);
           setSound(null);
@@ -93,31 +94,39 @@ export default function BackgroundSelector({
       stopCurrentSound();
     };
   }, []);
-  
+
   const renderEffectItem = ({ item }: { item: AudioEffect }) => {
     const isSelected = item.id === selectedEffectId;
     const isPlaying = item.id === playingEffectId;
-    
+
     return (
       <Card
-        style={[
+        style={StyleSheet.flatten([
           styles.effectCard,
-          isSelected && styles.selectedEffectCard
-        ]}
-        onPress={() => onSelectEffect(item.id)}
+          isSelected && styles.selectedEffectCard,
+        ])}
+        onPress={() => {
+          if (!isPlayButtonPressed) {
+            onSelectEffect(item.id);
+          }
+        }}
       >
         <View style={styles.effectHeader}>
           <Text style={styles.effectName}>{item.name}</Text>
-          
+
           {item.previewUrl && (
-            <Pressable 
-              style={[styles.playButton, isPlaying && styles.playingButton]}
+            <Pressable
+              style={StyleSheet.flatten([
+                styles.playButton,
+                isPlaying && styles.playingButton,
+              ])}
+              onPressIn={() => setIsPlayButtonPressed(true)}
+              onPressOut={() => {
+                setTimeout(() => setIsPlayButtonPressed(false), 100);
+              }}
               onPress={(e) => {
                 e.stopPropagation();
                 handlePlayPreview(item.id, item.previewUrl);
-                if (!isPlaying) {
-                  onPreviewEffect?.(item.id);
-                }
               }}
             >
               {isPlaying ? (
@@ -128,31 +137,33 @@ export default function BackgroundSelector({
             </Pressable>
           )}
         </View>
-        
+
         <View style={styles.waveformContainer}>
-          <View style={[
-            styles.waveform,
-            isPlaying && styles.activeWaveform
-          ]} />
+          <View
+            style={StyleSheet.flatten([
+              styles.waveform,
+              isPlaying && styles.activeWaveform,
+            ])}
+          />
         </View>
       </Card>
     );
   };
-  
+
   return (
     <View style={styles.container}>
-      {effectCategories.map(category => {
+      {effectCategories.map((category) => {
         const categoryEffects = getEffectsByCategory(category.id);
-        
+
         if (categoryEffects.length === 0) return null;
-        
+
         return (
           <View key={category.id} style={styles.categorySection}>
             <Text style={styles.categoryTitle}>{category.title}</Text>
             <FlatList
               data={categoryEffects}
               renderItem={renderEffectItem}
-              keyExtractor={item => item.id}
+              keyExtractor={(item) => item.id}
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.effectList}

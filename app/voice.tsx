@@ -1,7 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, Pressable, Alert } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+  ScrollView,
+  Pressable,
+  Alert,
+} from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ChevronLeft, ChevronRight, Volume2, Settings } from 'lucide-react-native';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Volume2,
+  Settings,
+} from 'lucide-react-native';
 import Slider from '@react-native-community/slider';
 import Colors from '../constants/Colors';
 import Layout from '../constants/Layout';
@@ -23,11 +35,11 @@ export default function VoiceScreen() {
   const [speed, setSpeed] = useState(1);
   const [stability, setStability] = useState(0.7);
   const [isProcessing, setIsProcessing] = useState(false);
-  
+
   const handleSelectVoice = (voiceId: string) => {
     setSelectedVoice(voiceId);
   };
-  
+
   const handleNext = async () => {
     if (!selectedVoice || !id || !session?.user) {
       Alert.alert('Error', 'Please select a voice first');
@@ -46,15 +58,20 @@ export default function VoiceScreen() {
         stability,
       });
 
-      // Update audiobook status
-      await updateAudiobook(id as string, {
-        voice_id: selectedVoice,
-        status: 'processing',
-      });
+      // Generate voice audio
+      const originalText = (() => {
+        try {
+          const parsedContent = JSON.parse(decodeURIComponent(text as string));
+          return (
+            parsedContent.originalText || decodeURIComponent(text as string)
+          );
+        } catch {
+          return decodeURIComponent(text as string);
+        }
+      })();
 
-      // Generate audio
       const audioBlob = await elevenlabsApi.textToSpeech(
-        decodeURIComponent(text as string),
+        originalText,
         selectedVoice,
         {
           stability,
@@ -69,16 +86,20 @@ export default function VoiceScreen() {
       reader.onloadend = async () => {
         const base64Audio = reader.result as string;
 
-        // Update audiobook with audio
+        // Update audiobook with voice audio only
         await updateAudiobook(id as string, {
+          voice_id: selectedVoice,
           audio_url: base64Audio,
           status: 'completed',
         });
 
-        // Navigate to audio effects
+        // Navigate to audio effects for background selection
         router.push({
           pathname: '/audio',
-          params: { id },
+          params: {
+            id,
+            voiceAudio: base64Audio,
+          },
         });
       };
     } catch (error: any) {
@@ -87,7 +108,7 @@ export default function VoiceScreen() {
       setIsProcessing(false);
     }
   };
-  
+
   const handleBack = () => {
     router.back();
   };
@@ -99,25 +120,22 @@ export default function VoiceScreen() {
       </View>
     );
   }
-  
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Pressable 
-          style={styles.backButton} 
-          onPress={handleBack}
-        >
+        <Pressable style={styles.backButton} onPress={handleBack}>
           <ChevronLeft size={24} color={Colors.black} />
         </Pressable>
-        
+
         <Text style={styles.headerTitle}>Choose Voice</Text>
-        
+
         <Pressable style={styles.settingsButton}>
           <Settings size={20} color={Colors.black} />
         </Pressable>
       </View>
-      
-      <ScrollView 
+
+      <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -127,8 +145,8 @@ export default function VoiceScreen() {
           <Text style={styles.sectionDesc}>
             Choose a voice that best fits your audiobook's style and tone.
           </Text>
-          
-          <VoiceSelector 
+
+          <VoiceSelector
             voices={voices}
             selectedVoiceId={selectedVoice}
             onSelectVoice={handleSelectVoice}
@@ -139,19 +157,20 @@ export default function VoiceScreen() {
             }}
           />
         </View>
-        
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Voice Settings</Text>
           <Text style={styles.sectionDesc}>
-            Customize the voice to match your preferences. Click the play button above to preview changes.
+            Customize the voice to match your preferences. Click the play button
+            above to preview changes.
           </Text>
-          
+
           <View style={styles.sliderContainer}>
             <View style={styles.sliderLabel}>
               <Volume2 size={18} color={Colors.black} />
               <Text style={styles.sliderText}>Pitch</Text>
             </View>
-            
+
             <View style={styles.sliderContent}>
               <Slider
                 value={pitch}
@@ -163,7 +182,7 @@ export default function VoiceScreen() {
                 thumbTintColor={Colors.black}
                 style={styles.slider}
               />
-              
+
               <View style={styles.sliderValues}>
                 <Text style={styles.sliderValueText}>Low</Text>
                 <Text style={styles.sliderValueText}>{pitch.toFixed(1)}</Text>
@@ -171,13 +190,13 @@ export default function VoiceScreen() {
               </View>
             </View>
           </View>
-          
+
           <View style={styles.sliderContainer}>
             <View style={styles.sliderLabel}>
               <Volume2 size={18} color={Colors.black} />
               <Text style={styles.sliderText}>Speed</Text>
             </View>
-            
+
             <View style={styles.sliderContent}>
               <Slider
                 value={speed}
@@ -189,7 +208,7 @@ export default function VoiceScreen() {
                 thumbTintColor={Colors.black}
                 style={styles.slider}
               />
-              
+
               <View style={styles.sliderValues}>
                 <Text style={styles.sliderValueText}>Slow</Text>
                 <Text style={styles.sliderValueText}>{speed.toFixed(1)}x</Text>
@@ -197,13 +216,13 @@ export default function VoiceScreen() {
               </View>
             </View>
           </View>
-          
+
           <View style={styles.sliderContainer}>
             <View style={styles.sliderLabel}>
               <Volume2 size={18} color={Colors.black} />
               <Text style={styles.sliderText}>Stability</Text>
             </View>
-            
+
             <View style={styles.sliderContent}>
               <Slider
                 value={stability}
@@ -215,16 +234,18 @@ export default function VoiceScreen() {
                 thumbTintColor={Colors.black}
                 style={styles.slider}
               />
-              
+
               <View style={styles.sliderValues}>
                 <Text style={styles.sliderValueText}>Creative</Text>
-                <Text style={styles.sliderValueText}>{stability.toFixed(1)}</Text>
+                <Text style={styles.sliderValueText}>
+                  {stability.toFixed(1)}
+                </Text>
                 <Text style={styles.sliderValueText}>Stable</Text>
               </View>
             </View>
           </View>
         </View>
-        
+
         <View style={styles.tipSection}>
           <Text style={styles.tipTitle}>Voice Tips</Text>
           <Text style={styles.tipText}>
@@ -238,17 +259,17 @@ export default function VoiceScreen() {
           </Text>
         </View>
       </ScrollView>
-      
+
       <View style={styles.footer}>
-        <Button 
-          title="Back: Text Input" 
+        <Button
+          title="Back: Text Input"
           variant="outline"
           onPress={handleBack}
           style={styles.footerButton}
         />
-        
-        <Button 
-          title="Next: Audio Effects" 
+
+        <Button
+          title="Next: Audio Effects"
           onPress={handleNext}
           loading={isProcessing}
           disabled={!selectedVoice || isProcessing}

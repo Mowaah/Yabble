@@ -1,13 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, Pressable } from 'react-native';
-import { 
-  Play, Pause, SkipBack, SkipForward, 
-  Volume2, Clock, Share
+import {
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  Volume2,
+  Clock,
+  Share,
 } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 import Slider from '../ui/Slider';
 import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
+import { audioEffects } from '../../lib/audio';
+import { mockAudioEffects } from '../../utils/mockData';
 import type { Tables } from '../../lib/database';
 
 interface PlayerProps {
@@ -16,97 +23,130 @@ interface PlayerProps {
   onExpand?: () => void;
 }
 
-export default function Player({ audiobook, minimized = false, onExpand }: PlayerProps) {
+export default function Player({
+  audiobook,
+  minimized = false,
+  onExpand,
+}: PlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
-  
+
   useEffect(() => {
-    loadAudio();
     return () => {
-      if (sound) {
-        sound.unloadAsync();
+      // Cleanup audio when component unmounts
+      if (isPlaying) {
+        audioEffects.stopAllAudio();
       }
     };
-  }, [audiobook.audio_url]);
+  }, [isPlaying]);
 
-  const loadAudio = async () => {
+  const getBackgroundEffect = () => {
+    try {
+      const parsedContent = JSON.parse(audiobook.text_content);
+      return parsedContent.backgroundEffect;
+    } catch {
+      return null;
+    }
+  };
+
+  const togglePlayback = async () => {
     if (!audiobook.audio_url) return;
 
     try {
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: audiobook.audio_url },
-        { shouldPlay: false },
-        onPlaybackStatusUpdate
-      );
-      setSound(newSound);
-
-      const status = await newSound.getStatusAsync();
-      if (status.isLoaded) {
-        setDuration(status.durationMillis ? status.durationMillis / 1000 : 0);
-      }
-    } catch (error) {
-      console.error('Error loading audio:', error);
-    }
-  };
-
-  const onPlaybackStatusUpdate = (status: any) => {
-    if (!status.isLoaded) return;
-
-    const position = status.positionMillis / 1000;
-    const duration = status.durationMillis / 1000;
-    setCurrentTime(position);
-    setProgress(position / duration);
-
-    if (status.didJustFinish) {
-      setIsPlaying(false);
-      setProgress(0);
-      setCurrentTime(0);
-    }
-  };
-  
-  const togglePlayback = async () => {
-    if (!sound) return;
-
-    try {
       if (isPlaying) {
-        await sound.pauseAsync();
+        // Stop all audio
+        await audioEffects.stopAllAudio();
+        setIsPlaying(false);
+        setProgress(0);
+        setCurrentTime(0);
       } else {
-        await sound.playAsync();
+        // Load voice audio
+        await audioEffects.loadVoiceAudio(audiobook.audio_url);
+
+        // Load background effect if available
+        const backgroundEffectId = getBackgroundEffect();
+        if (backgroundEffectId) {
+          const effect = mockAudioEffects.find(
+            (e) => e.id === backgroundEffectId
+          );
+          if (effect?.previewUrl) {
+            await audioEffects.loadBackgroundMusic(effect.previewUrl);
+          }
+        }
+
+        // Play mixed audio (voice controls the duration)
+        await audioEffects.playMixedAudio();
+        setIsPlaying(true);
+
+        // Monitor playback status to update UI when audio ends
+        const checkStatus = async () => {
+          const status = await audioEffects.getPlaybackStatus();
+
+          if (status.voiceDuration && status.voiceDuration > 0) {
+            const newDuration = status.voiceDuration / 1000; // Convert to seconds
+            const newCurrentTime = status.voicePosition
+              ? status.voicePosition / 1000
+              : 0;
+            const newProgress =
+              newDuration > 0 ? newCurrentTime / newDuration : 0;
+
+            setDuration(newDuration);
+            setCurrentTime(newCurrentTime);
+            setProgress(newProgress);
+          }
+
+          if (!status.voiceIsPlaying && !status.backgroundIsPlaying) {
+            setIsPlaying(false);
+            setProgress(0);
+            setCurrentTime(0);
+          } else if (isPlaying) {
+            setTimeout(checkStatus, 500); // Check every 500ms
+          }
+        };
+
+        setTimeout(checkStatus, 1000); // Start checking after 1 second
       }
-      setIsPlaying(!isPlaying);
     } catch (error) {
       console.error('Error toggling playback:', error);
+      setIsPlaying(false);
     }
   };
-  
+
   const handleSkipBack = async () => {
-    if (!sound) return;
-    const newTime = Math.max(0, currentTime - 15);
-    await sound.setPositionAsync(newTime * 1000);
+    // For now, we'll just restart the audio as seeking requires more complex implementation
+    if (isPlaying) {
+      await audioEffects.stopAllAudio();
+      setTimeout(() => {
+        togglePlayback();
+      }, 100);
+    }
   };
-  
+
   const handleSkipForward = async () => {
-    if (!sound) return;
-    const newTime = Math.min(duration, currentTime + 15);
-    await sound.setPositionAsync(newTime * 1000);
+    // For now, we'll just stop the audio
+    if (isPlaying) {
+      await audioEffects.stopAllAudio();
+      setIsPlaying(false);
+      setProgress(1);
+      setCurrentTime(duration);
+    }
   };
-  
+
   const handleSliderChange = async (value: number) => {
-    if (!sound) return;
-    const newPosition = value * duration;
+    // Seeking in mixed audio is complex, so for now we'll just update the visual
+    const newTime = value * duration;
     setProgress(value);
-    await sound.setPositionAsync(newPosition * 1000);
+    setCurrentTime(newTime);
   };
-  
+
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
-  
+
   // Minimized player
   if (minimized) {
     return (
@@ -116,17 +156,14 @@ export default function Player({ audiobook, minimized = false, onExpand }: Playe
             {audiobook.title}
           </Text>
           <View style={styles.progressBarMini}>
-            <View 
-              style={[
-                styles.progressFill, 
-                { width: `${progress * 100}%` }
-              ]} 
+            <View
+              style={[styles.progressFill, { width: `${progress * 100}%` }]}
             />
           </View>
         </View>
-        
-        <Pressable 
-          style={styles.minimizedPlayButton} 
+
+        <Pressable
+          style={styles.minimizedPlayButton}
           onPress={(e) => {
             e.stopPropagation();
             togglePlayback();
@@ -141,29 +178,27 @@ export default function Player({ audiobook, minimized = false, onExpand }: Playe
       </Pressable>
     );
   }
-  
+
   // Full player
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
         <View style={styles.currentTime}>
           <Clock size={16} color={Colors.gray[500]} />
-          <Text style={styles.timeText}>
-            {formatTime(currentTime)}
-          </Text>
+          <Text style={styles.timeText}>{formatTime(currentTime)}</Text>
         </View>
-        
+
         <View style={styles.title}>
           <Text style={styles.titleText} numberOfLines={1}>
             {audiobook.title}
           </Text>
         </View>
-        
+
         <Pressable style={styles.shareButton}>
           <Share size={20} color={Colors.black} />
         </Pressable>
       </View>
-      
+
       <View style={styles.progressContainer}>
         <Slider
           value={progress}
@@ -172,19 +207,21 @@ export default function Player({ audiobook, minimized = false, onExpand }: Playe
           maximumTrackTintColor={Colors.gray[300]}
           thumbTintColor={Colors.black}
         />
-        
+
         <View style={styles.timeLabels}>
           <Text style={styles.timeLabel}>{formatTime(currentTime)}</Text>
-          <Text style={styles.timeLabel}>-{formatTime(duration - currentTime)}</Text>
+          <Text style={styles.timeLabel}>
+            -{formatTime(duration - currentTime)}
+          </Text>
         </View>
       </View>
-      
+
       <View style={styles.controls}>
         <View style={styles.mainControls}>
           <Pressable style={styles.skipButton} onPress={handleSkipBack}>
             <SkipBack size={24} color={Colors.black} />
           </Pressable>
-          
+
           <Pressable style={styles.playPauseButton} onPress={togglePlayback}>
             {isPlaying ? (
               <Pause size={28} color={Colors.white} />
@@ -192,7 +229,7 @@ export default function Player({ audiobook, minimized = false, onExpand }: Playe
               <Play size={28} color={Colors.white} />
             )}
           </Pressable>
-          
+
           <Pressable style={styles.skipButton} onPress={handleSkipForward}>
             <SkipForward size={24} color={Colors.black} />
           </Pressable>
@@ -272,7 +309,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginHorizontal: Layout.spacing.md,
   },
-  
+
   // Minimized player styles
   minimizedContainer: {
     flexDirection: 'row',

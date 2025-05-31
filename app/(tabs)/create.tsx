@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { FileUp, Mic, Link as LinkIcon, Text as TextIcon } from 'lucide-react-native';
+import {
+  FileUp,
+  Mic,
+  Link as LinkIcon,
+  Text as TextIcon,
+} from 'lucide-react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
@@ -24,23 +29,28 @@ export default function CreateScreen() {
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  
+
   const handleTextInput = () => {
     setInputMethod(InputMethod.TEXT);
   };
-  
+
   const handleFileInput = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: ['text/plain', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        type: [
+          'text/plain',
+          'application/pdf',
+          'application/msword',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        ],
         copyToCacheDirectory: true,
       });
-      
-      if (result.canceled) {
+
+      if (result.type === 'cancel') {
         return;
       }
-      
-      const file = result.assets[0];
+
+      const file = result;
       setSelectedFile(file.name);
       setInputMethod(InputMethod.FILE);
 
@@ -52,11 +62,11 @@ export default function CreateScreen() {
       Alert.alert('Error', 'Could not read file');
     }
   };
-  
+
   const handleUrlInput = () => {
     setInputMethod(InputMethod.URL);
   };
-  
+
   const handleNext = async () => {
     try {
       // Validate inputs
@@ -64,12 +74,12 @@ export default function CreateScreen() {
         Alert.alert('Error', 'Please enter some text');
         return;
       }
-      
+
       if (inputMethod === InputMethod.URL && !url) {
         Alert.alert('Error', 'Please enter a valid URL');
         return;
       }
-      
+
       if (!title) {
         Alert.alert('Error', 'Please enter a title for your audiobook');
         return;
@@ -78,7 +88,10 @@ export default function CreateScreen() {
       // Create the audiobook in Supabase
       const audiobook = await create({
         title,
-        textContent: text,
+        textContent: JSON.stringify({
+          originalText: text,
+          backgroundEffect: null,
+        }),
       });
 
       // Navigate to voice selection with the new audiobook ID
@@ -94,7 +107,7 @@ export default function CreateScreen() {
       Alert.alert('Error', error.message);
     }
   };
-  
+
   const renderInputMethod = () => {
     switch (inputMethod) {
       case InputMethod.TEXT:
@@ -112,13 +125,15 @@ export default function CreateScreen() {
             />
           </View>
         );
-      
+
       case InputMethod.FILE:
         return (
           <View style={styles.inputContainer}>
             <Text style={styles.inputLabel}>Selected File</Text>
             <View style={styles.fileContainer}>
-              <Text style={styles.fileName}>{selectedFile || 'No file selected'}</Text>
+              <Text style={styles.fileName}>
+                {selectedFile || 'No file selected'}
+              </Text>
               <Button
                 title="Change"
                 size="sm"
@@ -128,7 +143,7 @@ export default function CreateScreen() {
             </View>
           </View>
         );
-      
+
       case InputMethod.URL:
         return (
           <View style={styles.inputContainer}>
@@ -142,14 +157,14 @@ export default function CreateScreen() {
             />
           </View>
         );
-      
+
       default:
         return null;
     }
   };
-  
+
   return (
-    <ScrollView 
+    <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
@@ -158,13 +173,13 @@ export default function CreateScreen() {
         <Text style={styles.title}>Create New Audiobook</Text>
         <Text style={styles.subtitle}>Choose a method to input your text</Text>
       </View>
-      
+
       <View style={styles.methodsContainer}>
-        <Card 
-          style={[
+        <Card
+          style={StyleSheet.flatten([
             styles.methodCard,
-            inputMethod === InputMethod.TEXT && styles.selectedMethodCard
-          ]}
+            inputMethod === InputMethod.TEXT && styles.selectedMethodCard,
+          ])}
           onPress={handleTextInput}
         >
           <View style={styles.methodIcon}>
@@ -173,12 +188,12 @@ export default function CreateScreen() {
           <Text style={styles.methodTitle}>Enter Text</Text>
           <Text style={styles.methodDesc}>Type or paste text directly</Text>
         </Card>
-        
-        <Card 
-          style={[
+
+        <Card
+          style={StyleSheet.flatten([
             styles.methodCard,
-            inputMethod === InputMethod.FILE && styles.selectedMethodCard
-          ]}
+            inputMethod === InputMethod.FILE && styles.selectedMethodCard,
+          ])}
           onPress={handleFileInput}
         >
           <View style={styles.methodIcon}>
@@ -187,12 +202,12 @@ export default function CreateScreen() {
           <Text style={styles.methodTitle}>Upload File</Text>
           <Text style={styles.methodDesc}>PDF, DOCX, or TXT files</Text>
         </Card>
-        
-        <Card 
-          style={[
+
+        <Card
+          style={StyleSheet.flatten([
             styles.methodCard,
-            inputMethod === InputMethod.URL && styles.selectedMethodCard
-          ]}
+            inputMethod === InputMethod.URL && styles.selectedMethodCard,
+          ])}
           onPress={handleUrlInput}
         >
           <View style={styles.methodIcon}>
@@ -202,11 +217,11 @@ export default function CreateScreen() {
           <Text style={styles.methodDesc}>Extract text from a website</Text>
         </Card>
       </View>
-      
+
       {inputMethod && (
         <>
           {renderInputMethod()}
-          
+
           <View style={styles.titleContainer}>
             <Input
               label="Audiobook Title"
@@ -215,7 +230,7 @@ export default function CreateScreen() {
               onChangeText={setTitle}
             />
           </View>
-          
+
           <Button
             title="Next: Choose Voice"
             onPress={handleNext}
@@ -225,10 +240,12 @@ export default function CreateScreen() {
           />
         </>
       )}
-      
+
       <View style={styles.tipContainer}>
         <Text style={styles.tipTitle}>Tips for best results:</Text>
-        <Text style={styles.tipText}>• Use proper punctuation for natural pauses</Text>
+        <Text style={styles.tipText}>
+          • Use proper punctuation for natural pauses
+        </Text>
         <Text style={styles.tipText}>• Mark dialogue with quotation marks</Text>
         <Text style={styles.tipText}>• Check for spelling errors</Text>
       </View>

@@ -1,5 +1,14 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, Image, Pressable, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  Image,
+  Pressable,
+  Alert,
+  ActivityIndicator,
+  Platform,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { Play, Pause, Download, Share2, Trash2 } from 'lucide-react-native';
 import Colors from '../../constants/Colors';
@@ -7,6 +16,8 @@ import Layout from '../../constants/Layout';
 import Card from '../ui/Card';
 import { Audio } from 'expo-av';
 import { deleteAudiobook } from '../../lib/database';
+import { audioEffects } from '../../lib/audio';
+import { mockAudioEffects } from '../../utils/mockData';
 import type { Tables } from '../../lib/database';
 
 interface AudiobookCardProps {
@@ -17,8 +28,8 @@ interface AudiobookCardProps {
   onDelete?: () => void;
 }
 
-export default function AudiobookCard({ 
-  book, 
+export default function AudiobookCard({
+  book,
   compact = false,
   onShare,
   onDownload,
@@ -26,93 +37,134 @@ export default function AudiobookCard({
 }: AudiobookCardProps) {
   const router = useRouter();
   const [isPlaying, setIsPlaying] = useState(false);
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handlePress = () => {
     router.push(`/library/${book.id}`);
   };
 
+  const getBackgroundEffect = () => {
+    try {
+      const parsedContent = JSON.parse(book.text_content);
+      return parsedContent.backgroundEffect;
+    } catch {
+      return null;
+    }
+  };
+
   const handlePlayPause = async () => {
     if (!book.audio_url) return;
 
     try {
-      if (sound) {
-        if (isPlaying) {
-          await sound.pauseAsync();
-        } else {
-          await sound.playAsync();
-        }
-        setIsPlaying(!isPlaying);
+      if (isPlaying) {
+        // Stop all audio
+        await audioEffects.stopAllAudio();
+        setIsPlaying(false);
       } else {
-        const { sound: newSound } = await Audio.Sound.createAsync(
-          { uri: book.audio_url },
-          { shouldPlay: true }
-        );
-        setSound(newSound);
+        // Load voice audio
+        await audioEffects.loadVoiceAudio(book.audio_url);
+
+        // Load background effect if available
+        const backgroundEffectId = getBackgroundEffect();
+        if (backgroundEffectId) {
+          const effect = mockAudioEffects.find(
+            (e) => e.id === backgroundEffectId
+          );
+          if (effect?.previewUrl) {
+            await audioEffects.loadBackgroundMusic(effect.previewUrl);
+          }
+        }
+
+        // Play mixed audio (voice controls the duration)
+        await audioEffects.playMixedAudio();
         setIsPlaying(true);
 
-        newSound.setOnPlaybackStatusUpdate(status => {
-          if (status.isLoaded && status.didJustFinish) {
+        // Monitor playback status to update UI when audio ends
+        const checkStatus = async () => {
+          const status = await audioEffects.getPlaybackStatus();
+          if (!status.voiceIsPlaying && !status.backgroundIsPlaying) {
             setIsPlaying(false);
+          } else if (isPlaying) {
+            setTimeout(checkStatus, 500); // Check every 500ms
           }
-        });
+        };
+
+        setTimeout(checkStatus, 1000); // Start checking after 1 second
       }
     } catch (error) {
       console.error('Error playing audio:', error);
       Alert.alert('Error', 'Could not play audio');
+      setIsPlaying(false);
     }
   };
 
   const handleDelete = async (e: any) => {
     // Stop event propagation
     e.stopPropagation();
-    
+
     if (isDeleting) return;
 
-    Alert.alert(
-      'Delete Audiobook',
-      `Are you sure you want to delete "${book.title}"?`,
-      [
-        { text: 'Cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setIsDeleting(true);
-              await deleteAudiobook(book.id);
-              onDelete?.();
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete audiobook');
-            } finally {
-              setIsDeleting(false);
-            }
-          }
+    const confirmed =
+      Platform.OS === 'web'
+        ? window.confirm(`Are you sure you want to delete "${book.title}"?`)
+        : await new Promise((resolve) => {
+            Alert.alert(
+              'Delete Audiobook',
+              `Are you sure you want to delete "${book.title}"?`,
+              [
+                { text: 'Cancel', onPress: () => resolve(false) },
+                {
+                  text: 'Delete',
+                  style: 'destructive',
+                  onPress: () => resolve(true),
+                },
+              ]
+            );
+          });
+
+    if (confirmed) {
+      try {
+        setIsDeleting(true);
+        await deleteAudiobook(book.id);
+        onDelete?.();
+      } catch (error) {
+        const errorMessage = 'Failed to delete audiobook';
+        if (Platform.OS === 'web') {
+          alert(errorMessage);
+        } else {
+          Alert.alert('Error', errorMessage);
         }
-      ]
-    );
+      } finally {
+        setIsDeleting(false);
+      }
+    }
   };
 
-  // Cleanup sound when component unmounts
-  React.useEffect(() => {
+  // Cleanup audio when component unmounts
+  useEffect(() => {
     return () => {
-      if (sound) {
-        sound.unloadAsync();
+      if (isPlaying) {
+        audioEffects.stopAllAudio();
       }
     };
-  }, [sound]);
+  }, [isPlaying]);
 
   if (compact) {
     return (
       <Card onPress={handlePress} style={styles.compactContainer}>
         <View style={styles.compactContent}>
-          <Image 
-            source={{ uri: book.cover_image || 'https://images.pexels.com/photos/1261180/pexels-photo-1261180.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2' }} 
-            style={styles.compactImage} 
+          <Image
+            source={{
+              uri:
+                book.cover_image ||
+                'https://images.pexels.com/photos/1261180/pexels-photo-1261180.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+            }}
+            style={styles.compactImage}
           />
           <View style={styles.compactDetails}>
-            <Text style={styles.compactTitle} numberOfLines={1}>{book.title}</Text>
+            <Text style={styles.compactTitle} numberOfLines={1}>
+              {book.title}
+            </Text>
             <View style={styles.statusBadge}>
               <Text style={styles.statusText}>{book.status}</Text>
             </View>
@@ -124,30 +176,36 @@ export default function AudiobookCard({
 
   return (
     <Card onPress={handlePress} style={styles.container}>
-      <Image 
-        source={{ uri: book.cover_image || 'https://images.pexels.com/photos/1261180/pexels-photo-1261180.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2' }} 
-        style={styles.image} 
+      <Image
+        source={{
+          uri:
+            book.cover_image ||
+            'https://images.pexels.com/photos/1261180/pexels-photo-1261180.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        }}
+        style={styles.image}
       />
-      
+
       <View style={styles.contentContainer}>
         <View style={styles.textContainer}>
-          <Text style={styles.title} numberOfLines={2}>{book.title}</Text>
-          
+          <Text style={styles.title} numberOfLines={2}>
+            {book.title}
+          </Text>
+
           <View style={styles.metaContainer}>
             <View style={styles.statusBadge}>
               <Text style={styles.statusText}>{book.status}</Text>
             </View>
           </View>
         </View>
-        
+
         <View style={styles.actionsContainer}>
-          <Pressable 
+          <Pressable
             style={[styles.actionButton, isDeleting && styles.disabledButton]}
             onPress={handleDelete}
             disabled={isDeleting}
           >
             {isDeleting ? (
-              <ActivityIndicator size="small\" color={Colors.error} />
+              <ActivityIndicator size="small" color={Colors.error} />
             ) : (
               <Trash2 size={20} color={Colors.error} />
             )}
@@ -155,21 +213,15 @@ export default function AudiobookCard({
 
           {book.status === 'completed' && book.audio_url && (
             <>
-              <Pressable 
-                style={styles.actionButton}
-                onPress={onDownload}
-              >
+              <Pressable style={styles.actionButton} onPress={onDownload}>
                 <Download size={20} color={Colors.black} />
               </Pressable>
-              
-              <Pressable 
-                style={styles.actionButton}
-                onPress={onShare}
-              >
+
+              <Pressable style={styles.actionButton} onPress={onShare}>
                 <Share2 size={20} color={Colors.black} />
               </Pressable>
-              
-              <Pressable 
+
+              <Pressable
                 style={[styles.playButton, isPlaying && styles.playingButton]}
                 onPress={handlePlayPause}
               >
@@ -256,7 +308,7 @@ const styles = StyleSheet.create({
   playingButton: {
     backgroundColor: Colors.success,
   },
-  
+
   // Compact styles
   compactContainer: {
     marginBottom: Layout.spacing.sm,
