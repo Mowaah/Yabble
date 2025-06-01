@@ -25,7 +25,7 @@ import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import Player from '../../components/audiobook/Player';
 import { useAuth } from '../../contexts/AuthContext';
-import { supabase } from '../../lib/supabase';
+import { db } from '../../lib/supabase';
 import { audioEffects } from '../../lib/audio';
 import { mockAudioEffects } from '../../utils/mockData';
 import type { Tables } from '../../lib/database';
@@ -45,7 +45,7 @@ export default function AudiobookDetailsScreen() {
       if (!session?.user?.id || !id) return;
 
       try {
-        const { data, error } = await supabase
+        const { data, error } = await db
           .from('audiobooks')
           .select('*')
           .eq('id', id)
@@ -63,15 +63,6 @@ export default function AudiobookDetailsScreen() {
 
     fetchAudiobook();
   }, [id, session?.user?.id]);
-
-  // Cleanup audio when component unmounts
-  useEffect(() => {
-    return () => {
-      if (isPlaying) {
-        audioEffects.stopAllAudio();
-      }
-    };
-  }, [isPlaying]);
 
   const getBackgroundEffect = () => {
     if (!audiobook) return null;

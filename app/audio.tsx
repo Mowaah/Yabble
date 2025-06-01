@@ -17,6 +17,7 @@ import {
   Volume2,
   Pause,
 } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Colors from '../constants/Colors';
 import Layout from '../constants/Layout';
 import Button from '../components/ui/Button';
@@ -243,244 +244,248 @@ export default function AudioScreen() {
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Pressable style={styles.backButton} onPress={handleBack}>
-          <ChevronLeft size={24} color={Colors.black} />
-        </Pressable>
+    <SafeAreaView style={{ flex: 1, backgroundColor: Colors.softCream }}>
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <Pressable style={styles.backButton} onPress={handleBack}>
+            <ChevronLeft size={24} color={Colors.black} />
+          </Pressable>
 
-        <Text style={styles.headerTitle}>Background Audio</Text>
+          <Text style={styles.headerTitle}>Background Audio</Text>
 
-        <View style={styles.placeholder} />
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Add Background Audio</Text>
-          <Text style={styles.sectionDesc}>
-            Choose background music, ambient sounds, or effects to enhance your
-            audiobook experience. This is optional but can add atmosphere to
-            your narration.
-          </Text>
+          <View style={styles.placeholder} />
         </View>
 
-        {effectCategories.map((category) => {
-          const categoryEffects = getEffectsByCategory(category.id);
-
-          if (categoryEffects.length === 0) return null;
-
-          return (
-            <View key={category.id} style={styles.section}>
-              <Text style={styles.categoryTitle}>{category.title}</Text>
-
-              <FlatList
-                data={categoryEffects}
-                renderItem={renderEffectItem}
-                keyExtractor={(item) => item.id}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.effectsListContent}
-              />
-            </View>
-          );
-        })}
-
-        <View style={styles.volumeSection}>
-          <Text style={styles.volumeTitle}>Voice Volume</Text>
-
-          <View style={styles.volumeSlider}>
-            <Volume2 size={18} color={Colors.black} />
-            <View
-              ref={volumeTrackRef}
-              style={styles.volumeTrack}
-              onLayout={(event) => {
-                const { width } = event.nativeEvent.layout;
-                setSliderWidth(width);
-              }}
-            >
-              <TouchableWithoutFeedback
-                onPress={(e) => {
-                  if (!volumeTrackRef.current || !sliderWidth) {
-                    return;
-                  }
-
-                  volumeTrackRef.current.measure(
-                    (x, y, width, height, pageX, pageY) => {
-                      const touchX = e.nativeEvent.pageX;
-                      const relativeX = touchX - pageX;
-
-                      if (relativeX < 0 || relativeX > width) {
-                        return;
-                      }
-
-                      const newVolume = Math.max(
-                        0,
-                        Math.min(1, relativeX / width)
-                      );
-
-                      if (isFinite(newVolume) && !isNaN(newVolume)) {
-                        handleVolumeChange(newVolume);
-                      }
-                    }
-                  );
-                }}
-              >
-                <View style={styles.volumeTrackPressable}>
-                  <View
-                    style={[styles.volumeFill, { width: `${volume * 100}%` }]}
-                  />
-                  <View
-                    style={[
-                      styles.volumeThumb,
-                      {
-                        left: `${Math.max(
-                          0,
-                          Math.min(100, volume * 100 - 1)
-                        )}%`,
-                      },
-                    ]}
-                  />
-                </View>
-              </TouchableWithoutFeedback>
-            </View>
-            <Text style={styles.volumeValue}>{Math.round(volume * 100)}%</Text>
-          </View>
-        </View>
-
-        <View style={styles.volumeSection}>
-          <Text style={styles.volumeTitle}>Background Volume</Text>
-
-          <View style={styles.volumeSlider}>
-            <Music size={18} color={Colors.black} />
-            <View
-              ref={backgroundVolumeTrackRef}
-              style={styles.volumeTrack}
-              onLayout={(event) => {
-                const { width } = event.nativeEvent.layout;
-                setBackgroundSliderWidth(width);
-              }}
-            >
-              <TouchableWithoutFeedback
-                onPress={(e) => {
-                  if (
-                    !backgroundVolumeTrackRef.current ||
-                    !backgroundSliderWidth
-                  ) {
-                    return;
-                  }
-
-                  backgroundVolumeTrackRef.current.measure(
-                    (x, y, width, height, pageX, pageY) => {
-                      const touchX = e.nativeEvent.pageX;
-                      const relativeX = touchX - pageX;
-
-                      if (relativeX < 0 || relativeX > width) {
-                        return;
-                      }
-
-                      const newVolume = Math.max(
-                        0,
-                        Math.min(1, relativeX / width)
-                      );
-
-                      if (isFinite(newVolume) && !isNaN(newVolume)) {
-                        handleBackgroundVolumeChange(newVolume);
-                      }
-                    }
-                  );
-                }}
-              >
-                <View style={styles.volumeTrackPressable}>
-                  <View
-                    style={[
-                      styles.volumeFill,
-                      { width: `${backgroundVolume * 100}%` },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.volumeThumb,
-                      {
-                        left: `${Math.max(
-                          0,
-                          Math.min(100, backgroundVolume * 100 - 1)
-                        )}%`,
-                      },
-                    ]}
-                  />
-                </View>
-              </TouchableWithoutFeedback>
-            </View>
-            <Text style={styles.volumeValue}>
-              {Math.round(backgroundVolume * 100)}%
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Add Background Audio</Text>
+            <Text style={styles.sectionDesc}>
+              Choose background music, ambient sounds, or effects to enhance
+              your audiobook experience. This is optional but can add atmosphere
+              to your narration.
             </Text>
           </View>
-        </View>
 
-        <Card style={styles.previewCard}>
-          <Text style={styles.previewTitle}>Final Audiobook Preview</Text>
-          <Text style={styles.previewDesc}>
-            Listen to your complete audiobook with voice narration and
-            background audio mixed together.
-          </Text>
+          {effectCategories.map((category) => {
+            const categoryEffects = getEffectsByCategory(category.id);
 
-          <View style={styles.previewWaveform}>
-            <View style={styles.waveformContainer}>
+            if (categoryEffects.length === 0) return null;
+
+            return (
+              <View key={category.id} style={styles.section}>
+                <Text style={styles.categoryTitle}>{category.title}</Text>
+
+                <FlatList
+                  data={categoryEffects}
+                  renderItem={renderEffectItem}
+                  keyExtractor={(item) => item.id}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.effectsListContent}
+                />
+              </View>
+            );
+          })}
+
+          <View style={styles.volumeSection}>
+            <Text style={styles.volumeTitle}>Voice Volume</Text>
+
+            <View style={styles.volumeSlider}>
+              <Volume2 size={18} color={Colors.black} />
               <View
-                style={[styles.waveform, isPlaying && styles.activeWaveform]}
-              />
+                ref={volumeTrackRef}
+                style={styles.volumeTrack}
+                onLayout={(event) => {
+                  const { width } = event.nativeEvent.layout;
+                  setSliderWidth(width);
+                }}
+              >
+                <TouchableWithoutFeedback
+                  onPress={(e) => {
+                    if (!volumeTrackRef.current || !sliderWidth) {
+                      return;
+                    }
+
+                    volumeTrackRef.current.measure(
+                      (x, y, width, height, pageX, pageY) => {
+                        const touchX = e.nativeEvent.pageX;
+                        const relativeX = touchX - pageX;
+
+                        if (relativeX < 0 || relativeX > width) {
+                          return;
+                        }
+
+                        const newVolume = Math.max(
+                          0,
+                          Math.min(1, relativeX / width)
+                        );
+
+                        if (isFinite(newVolume) && !isNaN(newVolume)) {
+                          handleVolumeChange(newVolume);
+                        }
+                      }
+                    );
+                  }}
+                >
+                  <View style={styles.volumeTrackPressable}>
+                    <View
+                      style={[styles.volumeFill, { width: `${volume * 100}%` }]}
+                    />
+                    <View
+                      style={[
+                        styles.volumeThumb,
+                        {
+                          left: `${Math.max(
+                            0,
+                            Math.min(100, volume * 100 - 1)
+                          )}%`,
+                        },
+                      ]}
+                    />
+                  </View>
+                </TouchableWithoutFeedback>
+              </View>
+              <Text style={styles.volumeValue}>
+                {Math.round(volume * 100)}%
+              </Text>
             </View>
           </View>
 
+          <View style={styles.volumeSection}>
+            <Text style={styles.volumeTitle}>Background Volume</Text>
+
+            <View style={styles.volumeSlider}>
+              <Music size={18} color={Colors.black} />
+              <View
+                ref={backgroundVolumeTrackRef}
+                style={styles.volumeTrack}
+                onLayout={(event) => {
+                  const { width } = event.nativeEvent.layout;
+                  setBackgroundSliderWidth(width);
+                }}
+              >
+                <TouchableWithoutFeedback
+                  onPress={(e) => {
+                    if (
+                      !backgroundVolumeTrackRef.current ||
+                      !backgroundSliderWidth
+                    ) {
+                      return;
+                    }
+
+                    backgroundVolumeTrackRef.current.measure(
+                      (x, y, width, height, pageX, pageY) => {
+                        const touchX = e.nativeEvent.pageX;
+                        const relativeX = touchX - pageX;
+
+                        if (relativeX < 0 || relativeX > width) {
+                          return;
+                        }
+
+                        const newVolume = Math.max(
+                          0,
+                          Math.min(1, relativeX / width)
+                        );
+
+                        if (isFinite(newVolume) && !isNaN(newVolume)) {
+                          handleBackgroundVolumeChange(newVolume);
+                        }
+                      }
+                    );
+                  }}
+                >
+                  <View style={styles.volumeTrackPressable}>
+                    <View
+                      style={[
+                        styles.volumeFill,
+                        { width: `${backgroundVolume * 100}%` },
+                      ]}
+                    />
+                    <View
+                      style={[
+                        styles.volumeThumb,
+                        {
+                          left: `${Math.max(
+                            0,
+                            Math.min(100, backgroundVolume * 100 - 1)
+                          )}%`,
+                        },
+                      ]}
+                    />
+                  </View>
+                </TouchableWithoutFeedback>
+              </View>
+              <Text style={styles.volumeValue}>
+                {Math.round(backgroundVolume * 100)}%
+              </Text>
+            </View>
+          </View>
+
+          <Card style={styles.previewCard}>
+            <Text style={styles.previewTitle}>Final Audiobook Preview</Text>
+            <Text style={styles.previewDesc}>
+              Listen to your complete audiobook with voice narration and
+              background audio mixed together.
+            </Text>
+
+            <View style={styles.previewWaveform}>
+              <View style={styles.waveformContainer}>
+                <View
+                  style={[styles.waveform, isPlaying && styles.activeWaveform]}
+                />
+              </View>
+            </View>
+
+            <Button
+              title={isPlaying ? 'Stop Preview' : 'Play Preview'}
+              variant="secondary"
+              onPress={handlePlayMixedPreview}
+              icon={
+                isPlaying ? (
+                  <Pause size={18} color={Colors.black} />
+                ) : (
+                  <Play size={18} color={Colors.black} />
+                )
+              }
+              style={styles.previewButton}
+            />
+          </Card>
+
+          <View style={styles.tipSection}>
+            <Text style={styles.tipTitle}>Audio Mixing Tips</Text>
+            <Text style={styles.tipText}>
+              • Background audio is automatically mixed at a lower volume
+            </Text>
+            <Text style={styles.tipText}>
+              • Adjust voice and background volumes independently
+            </Text>
+            <Text style={styles.tipText}>
+              • Use the preview to test your final audiobook mix
+            </Text>
+          </View>
+        </ScrollView>
+
+        <View style={styles.footer}>
           <Button
-            title={isPlaying ? 'Stop Preview' : 'Play Preview'}
-            variant="secondary"
-            onPress={handlePlayMixedPreview}
-            icon={
-              isPlaying ? (
-                <Pause size={18} color={Colors.black} />
-              ) : (
-                <Play size={18} color={Colors.black} />
-              )
-            }
-            style={styles.previewButton}
+            title="Back"
+            onPress={handleBack}
+            variant="outline"
+            style={styles.footerButton}
+            icon={<ChevronLeft size={18} color={Colors.black} />}
           />
-        </Card>
-
-        <View style={styles.tipSection}>
-          <Text style={styles.tipTitle}>Audio Mixing Tips</Text>
-          <Text style={styles.tipText}>
-            • Background audio is automatically mixed at a lower volume
-          </Text>
-          <Text style={styles.tipText}>
-            • Adjust voice and background volumes independently
-          </Text>
-          <Text style={styles.tipText}>
-            • Use the preview to test your final audiobook mix
-          </Text>
+          <Button
+            title="Next: Export"
+            onPress={handleNext}
+            style={styles.footerButton}
+            icon={<ChevronRight size={18} color={Colors.white} />}
+          />
         </View>
-      </ScrollView>
-
-      <View style={styles.footer}>
-        <Button
-          title="Back: Voice"
-          variant="outline"
-          onPress={handleBack}
-          style={styles.footerButton}
-        />
-
-        <Button
-          title="Complete Audiobook"
-          onPress={handleNext}
-          style={styles.footerButton}
-          icon={<ChevronRight size={18} color={Colors.white} />}
-        />
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -488,6 +493,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.softCream,
+    justifyContent: 'space-between',
   },
   header: {
     flexDirection: 'row',
@@ -513,8 +519,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    padding: Layout.spacing.md,
-    paddingBottom: Layout.spacing.xxl,
+    paddingHorizontal: Layout.spacing.md,
+    paddingBottom: Layout.spacing.xl,
   },
   section: {
     marginBottom: Layout.spacing.lg,
@@ -681,9 +687,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     padding: Layout.spacing.md,
-    backgroundColor: Colors.white,
     borderTopWidth: 1,
     borderTopColor: Colors.gray[200],
+    backgroundColor: Colors.white,
   },
   footerButton: {
     flex: 1,

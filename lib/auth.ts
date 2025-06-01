@@ -1,7 +1,7 @@
-import { supabase } from './supabase';
+import { auth } from './supabase';
 
 export async function signInWithEmail(email: string, password: string) {
-  const { data, error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await auth.signInWithPassword({
     email,
     password,
   });
@@ -9,7 +9,7 @@ export async function signInWithEmail(email: string, password: string) {
 }
 
 export async function signUpWithEmail(email: string, password: string) {
-  const { data, error } = await supabase.auth.signUp({
+  const { data, error } = await auth.signUp({
     email,
     password,
   });
@@ -17,11 +17,11 @@ export async function signUpWithEmail(email: string, password: string) {
 }
 
 export async function signOut() {
-  const { error } = await supabase.auth.signOut();
+  const { error } = await auth.signOut();
   return { error };
 }
 
 export async function resetPassword(email: string) {
-  const { data, error } = await supabase.auth.resetPasswordForEmail(email);
+  const { data, error } = await auth.resetPasswordForEmail(email);
   return { data, error };
 }

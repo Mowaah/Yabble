@@ -15,6 +15,7 @@ import {
   Settings,
 } from 'lucide-react-native';
 import Slider from '@react-native-community/slider';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Colors from '../constants/Colors';
 import Layout from '../constants/Layout';
 import Button from '../components/ui/Button';
@@ -115,169 +116,174 @@ export default function VoiceScreen() {
 
   if (loadingVoices) {
     return (
-      <View style={styles.loadingContainer}>
-        <Text>Loading voices...</Text>
-      </View>
+      <SafeAreaView style={{ flex: 1, backgroundColor: Colors.softCream }}>
+        <View style={styles.loadingContainer}>
+          <Text>Loading voices...</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Pressable style={styles.backButton} onPress={handleBack}>
-          <ChevronLeft size={24} color={Colors.black} />
-        </Pressable>
+    <SafeAreaView style={{ flex: 1, backgroundColor: Colors.softCream }}>
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <Pressable style={styles.backButton} onPress={handleBack}>
+            <ChevronLeft size={24} color={Colors.black} />
+          </Pressable>
 
-        <Text style={styles.headerTitle}>Choose Voice</Text>
+          <Text style={styles.headerTitle}>Choose Voice</Text>
 
-        <Pressable style={styles.settingsButton}>
-          <Settings size={20} color={Colors.black} />
-        </Pressable>
-      </View>
+          <Pressable style={styles.settingsButton}>
+            <Settings size={20} color={Colors.black} />
+          </Pressable>
+        </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Select a Voice</Text>
-          <Text style={styles.sectionDesc}>
-            Choose a voice that best fits your audiobook's style and tone.
-          </Text>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Select a Voice</Text>
+            <Text style={styles.sectionDesc}>
+              Choose a voice that best fits your audiobook's style and tone.
+            </Text>
 
-          <VoiceSelector
-            voices={voices}
-            selectedVoiceId={selectedVoice}
-            onSelectVoice={handleSelectVoice}
-            voiceSettings={{
-              pitch,
-              speed,
-              stability,
-            }}
+            <VoiceSelector
+              voices={voices}
+              selectedVoiceId={selectedVoice}
+              onSelectVoice={handleSelectVoice}
+              voiceSettings={{
+                pitch,
+                speed,
+                stability,
+              }}
+            />
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Voice Settings</Text>
+            <Text style={styles.sectionDesc}>
+              Customize the voice to match your preferences. Click the play
+              button above to preview changes.
+            </Text>
+
+            <View style={styles.sliderContainer}>
+              <View style={styles.sliderLabel}>
+                <Volume2 size={18} color={Colors.black} />
+                <Text style={styles.sliderText}>Pitch</Text>
+              </View>
+
+              <View style={styles.sliderContent}>
+                <Slider
+                  value={pitch}
+                  onValueChange={setPitch}
+                  minimumValue={0.5}
+                  maximumValue={1.5}
+                  minimumTrackTintColor={Colors.black}
+                  maximumTrackTintColor={Colors.gray[300]}
+                  thumbTintColor={Colors.black}
+                  style={styles.slider}
+                />
+
+                <View style={styles.sliderValues}>
+                  <Text style={styles.sliderValueText}>Low</Text>
+                  <Text style={styles.sliderValueText}>{pitch.toFixed(1)}</Text>
+                  <Text style={styles.sliderValueText}>High</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.sliderContainer}>
+              <View style={styles.sliderLabel}>
+                <Volume2 size={18} color={Colors.black} />
+                <Text style={styles.sliderText}>Speed</Text>
+              </View>
+
+              <View style={styles.sliderContent}>
+                <Slider
+                  value={speed}
+                  onValueChange={setSpeed}
+                  minimumValue={0.5}
+                  maximumValue={1.5}
+                  minimumTrackTintColor={Colors.black}
+                  maximumTrackTintColor={Colors.gray[300]}
+                  thumbTintColor={Colors.black}
+                  style={styles.slider}
+                />
+
+                <View style={styles.sliderValues}>
+                  <Text style={styles.sliderValueText}>Slow</Text>
+                  <Text style={styles.sliderValueText}>
+                    {speed.toFixed(1)}x
+                  </Text>
+                  <Text style={styles.sliderValueText}>Fast</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.sliderContainer}>
+              <View style={styles.sliderLabel}>
+                <Volume2 size={18} color={Colors.black} />
+                <Text style={styles.sliderText}>Stability</Text>
+              </View>
+
+              <View style={styles.sliderContent}>
+                <Slider
+                  value={stability}
+                  onValueChange={setStability}
+                  minimumValue={0}
+                  maximumValue={1}
+                  minimumTrackTintColor={Colors.black}
+                  maximumTrackTintColor={Colors.gray[300]}
+                  thumbTintColor={Colors.black}
+                  style={styles.slider}
+                />
+
+                <View style={styles.sliderValues}>
+                  <Text style={styles.sliderValueText}>Creative</Text>
+                  <Text style={styles.sliderValueText}>
+                    {stability.toFixed(1)}
+                  </Text>
+                  <Text style={styles.sliderValueText}>Stable</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.tipSection}>
+            <Text style={styles.tipTitle}>Voice Tips</Text>
+            <Text style={styles.tipText}>
+              • Higher stability produces more consistent narration
+            </Text>
+            <Text style={styles.tipText}>
+              • Adjust pitch to match character personalities
+            </Text>
+            <Text style={styles.tipText}>
+              • Try different speeds for different content types
+            </Text>
+          </View>
+        </ScrollView>
+
+        <View style={styles.footer}>
+          <Button
+            title="Back"
+            onPress={handleBack}
+            variant="outline"
+            style={styles.footerButton}
+            icon={<ChevronLeft size={18} color={Colors.black} />}
+          />
+          <Button
+            title="Next: Audio Effects"
+            onPress={handleNext}
+            style={styles.footerButton}
+            icon={<ChevronRight size={18} color={Colors.white} />}
+            loading={isProcessing}
           />
         </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Voice Settings</Text>
-          <Text style={styles.sectionDesc}>
-            Customize the voice to match your preferences. Click the play button
-            above to preview changes.
-          </Text>
-
-          <View style={styles.sliderContainer}>
-            <View style={styles.sliderLabel}>
-              <Volume2 size={18} color={Colors.black} />
-              <Text style={styles.sliderText}>Pitch</Text>
-            </View>
-
-            <View style={styles.sliderContent}>
-              <Slider
-                value={pitch}
-                onValueChange={setPitch}
-                minimumValue={0.5}
-                maximumValue={1.5}
-                minimumTrackTintColor={Colors.black}
-                maximumTrackTintColor={Colors.gray[300]}
-                thumbTintColor={Colors.black}
-                style={styles.slider}
-              />
-
-              <View style={styles.sliderValues}>
-                <Text style={styles.sliderValueText}>Low</Text>
-                <Text style={styles.sliderValueText}>{pitch.toFixed(1)}</Text>
-                <Text style={styles.sliderValueText}>High</Text>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.sliderContainer}>
-            <View style={styles.sliderLabel}>
-              <Volume2 size={18} color={Colors.black} />
-              <Text style={styles.sliderText}>Speed</Text>
-            </View>
-
-            <View style={styles.sliderContent}>
-              <Slider
-                value={speed}
-                onValueChange={setSpeed}
-                minimumValue={0.5}
-                maximumValue={1.5}
-                minimumTrackTintColor={Colors.black}
-                maximumTrackTintColor={Colors.gray[300]}
-                thumbTintColor={Colors.black}
-                style={styles.slider}
-              />
-
-              <View style={styles.sliderValues}>
-                <Text style={styles.sliderValueText}>Slow</Text>
-                <Text style={styles.sliderValueText}>{speed.toFixed(1)}x</Text>
-                <Text style={styles.sliderValueText}>Fast</Text>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.sliderContainer}>
-            <View style={styles.sliderLabel}>
-              <Volume2 size={18} color={Colors.black} />
-              <Text style={styles.sliderText}>Stability</Text>
-            </View>
-
-            <View style={styles.sliderContent}>
-              <Slider
-                value={stability}
-                onValueChange={setStability}
-                minimumValue={0}
-                maximumValue={1}
-                minimumTrackTintColor={Colors.black}
-                maximumTrackTintColor={Colors.gray[300]}
-                thumbTintColor={Colors.black}
-                style={styles.slider}
-              />
-
-              <View style={styles.sliderValues}>
-                <Text style={styles.sliderValueText}>Creative</Text>
-                <Text style={styles.sliderValueText}>
-                  {stability.toFixed(1)}
-                </Text>
-                <Text style={styles.sliderValueText}>Stable</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.tipSection}>
-          <Text style={styles.tipTitle}>Voice Tips</Text>
-          <Text style={styles.tipText}>
-            • Higher stability produces more consistent narration
-          </Text>
-          <Text style={styles.tipText}>
-            • Adjust pitch to match character personalities
-          </Text>
-          <Text style={styles.tipText}>
-            • Try different speeds for different content types
-          </Text>
-        </View>
-      </ScrollView>
-
-      <View style={styles.footer}>
-        <Button
-          title="Back: Text Input"
-          variant="outline"
-          onPress={handleBack}
-          style={styles.footerButton}
-        />
-
-        <Button
-          title="Next: Audio Effects"
-          onPress={handleNext}
-          loading={isProcessing}
-          disabled={!selectedVoice || isProcessing}
-          style={styles.footerButton}
-          icon={<ChevronRight size={18} color={Colors.white} />}
-        />
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -285,6 +291,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.softCream,
+    justifyContent: 'space-between',
   },
   loadingContainer: {
     flex: 1,
@@ -317,7 +324,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: Layout.spacing.md,
-    paddingBottom: Layout.spacing.xxl,
+    paddingBottom: Layout.spacing.xl,
   },
   section: {
     marginBottom: Layout.spacing.xl,
@@ -384,9 +391,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     padding: Layout.spacing.md,
-    backgroundColor: Colors.white,
+    paddingHorizontal: Layout.spacing.md,
     borderTopWidth: 1,
     borderTopColor: Colors.gray[200],
+    backgroundColor: Colors.white,
   },
   footerButton: {
     flex: 1,
