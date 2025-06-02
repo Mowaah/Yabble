@@ -35,7 +35,7 @@ export default ({ config }) => {
         ...(config.android?.adaptiveIcon || {}),
         foregroundImage:
           config.android?.adaptiveIcon?.foregroundImage ||
-          './assets/images/adaptive-icon.png',
+          './assets/images/icon.png',
         backgroundColor:
           config.android?.adaptiveIcon?.backgroundColor || '#FFFFFF',
       },
