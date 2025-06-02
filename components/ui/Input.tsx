@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { 
-  StyleSheet, 
-  TextInput, 
-  View, 
-  Text, 
-  TextInputProps, 
+import {
+  StyleSheet,
+  TextInput,
+  View,
+  Text,
+  TextInputProps,
   ViewStyle,
   TextStyle,
   Pressable,
@@ -13,7 +13,7 @@ import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
 import { Eye, EyeOff } from 'lucide-react-native';
 
-interface InputProps extends TextInputProps {
+interface InputProps extends Omit<TextInputProps, 'secureTextEntry'> {
   label?: string;
   error?: string;
   containerStyle?: ViewStyle;
@@ -33,10 +33,27 @@ export default function Input({
   rightIcon,
   leftIcon,
   type = 'text',
+  onFocus,
+  onBlur,
   ...rest
 }: InputProps) {
-  const [secureTextEntry, setSecureTextEntry] = useState(type === 'password');
-  
+  const [isTextSecure, setIsTextSecure] = useState(type === 'password');
+  const [isFocused, setIsFocused] = useState(false);
+
+  const handleFocus = (e: any) => {
+    setIsFocused(true);
+    if (onFocus) {
+      onFocus(e);
+    }
+  };
+
+  const handleBlur = (e: any) => {
+    setIsFocused(false);
+    if (onBlur) {
+      onBlur(e);
+    }
+  };
+
   // Determine input keyboard type based on type prop
   const getKeyboardType = () => {
     switch (type) {
@@ -52,13 +69,13 @@ export default function Input({
   // Password visibility toggle
   const renderPasswordIcon = () => {
     if (type !== 'password') return null;
-    
+
     return (
-      <Pressable 
-        onPress={() => setSecureTextEntry(!secureTextEntry)}
+      <Pressable
+        onPress={() => setIsTextSecure(!isTextSecure)}
         style={styles.iconContainer}
       >
-        {secureTextEntry ? (
+        {isTextSecure ? (
           <Eye size={20} color={Colors.gray[500]} />
         ) : (
           <EyeOff size={20} color={Colors.gray[500]} />
@@ -69,47 +86,36 @@ export default function Input({
 
   return (
     <View style={[styles.container, containerStyle]}>
-      {label && (
-        <Text style={[styles.label, labelStyle]}>
-          {label}
-        </Text>
-      )}
-      
-      <View style={[
-        styles.inputContainer,
-        error ? styles.inputError : null,
-      ]}>
-        {leftIcon && (
-          <View style={styles.iconContainer}>
-            {leftIcon}
-          </View>
-        )}
-        
+      {label && <Text style={[styles.label, labelStyle]}>{label}</Text>}
+
+      <View
+        style={[
+          styles.inputContainer,
+          error ? styles.inputError : isFocused ? styles.inputFocused : null,
+        ]}
+      >
+        {leftIcon && <View style={styles.iconContainer}>{leftIcon}</View>}
+
         <TextInput
           style={[
             styles.input,
             leftIcon ? styles.inputWithLeftIcon : null,
-            (rightIcon || type === 'password') ? styles.inputWithRightIcon : null,
+            rightIcon || type === 'password' ? styles.inputWithRightIcon : null,
             inputStyle,
           ]}
           placeholderTextColor={Colors.gray[400]}
           keyboardType={getKeyboardType()}
-          secureTextEntry={secureTextEntry}
+          secureTextEntry={isTextSecure}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
           {...rest}
         />
-        
-        {renderPasswordIcon() || rightIcon && (
-          <View style={styles.iconContainer}>
-            {rightIcon}
-          </View>
-        )}
+
+        {renderPasswordIcon() ||
+          (rightIcon && <View style={styles.iconContainer}>{rightIcon}</View>)}
       </View>
-      
-      {error && (
-        <Text style={styles.errorText}>
-          {error}
-        </Text>
-      )}
+
+      {error && <Text style={styles.errorText}>{error}</Text>}
     </View>
   );
 }
@@ -128,9 +134,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.gray[300],
+    borderColor: Colors.orange,
     borderRadius: Layout.borderRadius.md,
     backgroundColor: Colors.white,
+  },
+  inputFocused: {
+    borderWidth: 2,
+    borderColor: Colors.orange,
   },
   input: {
     flex: 1,
@@ -147,6 +157,7 @@ const styles = StyleSheet.create({
   },
   inputError: {
     borderColor: Colors.error,
+    borderWidth: 2,
   },
   iconContainer: {
     paddingHorizontal: Layout.spacing.sm,

@@ -1,12 +1,12 @@
 import React from 'react';
-import { 
-  StyleSheet, 
-  Text, 
-  TouchableOpacity, 
+import {
+  StyleSheet,
+  Text,
+  TouchableOpacity,
   ActivityIndicator,
   ViewStyle,
   TextStyle,
-  View
+  View,
 } from 'react-native';
 import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
@@ -46,7 +46,7 @@ export default function Button({
       alignItems: 'center',
       justifyContent: 'center',
     };
-    
+
     // Size styles
     let sizeStyle: ViewStyle = {};
     switch (size) {
@@ -60,7 +60,7 @@ export default function Button({
         sizeStyle = { paddingVertical: 16, paddingHorizontal: 24 };
         break;
     }
-    
+
     // Variant styles
     let variantStyle: ViewStyle = {};
     switch (variant) {
@@ -71,23 +71,23 @@ export default function Button({
         variantStyle = { backgroundColor: Colors.lightPeach };
         break;
       case 'outline':
-        variantStyle = { 
-          backgroundColor: 'transparent', 
-          borderWidth: 1, 
-          borderColor: Colors.black 
+        variantStyle = {
+          backgroundColor: 'transparent',
+          borderWidth: 1,
+          borderColor: Colors.black,
         };
         break;
       case 'ghost':
         variantStyle = { backgroundColor: 'transparent' };
         break;
     }
-    
+
     // Width style
     const widthStyle = fullWidth ? { width: '100%' } : {};
-    
+
     // Disabled style
     const disabledStyle: ViewStyle = disabled ? { opacity: 0.5 } : {};
-    
+
     return {
       ...baseStyle,
       ...sizeStyle,
@@ -95,14 +95,14 @@ export default function Button({
       ...widthStyle,
       ...disabledStyle,
       ...style,
-    };
+    } as ViewStyle;
   };
-  
+
   const getTextStyles = (): TextStyle => {
     const baseTextStyle: TextStyle = {
       fontWeight: '600',
     };
-    
+
     // Size text styles
     let sizeTextStyle: TextStyle = {};
     switch (size) {
@@ -116,7 +116,7 @@ export default function Button({
         sizeTextStyle = { fontSize: 18 };
         break;
     }
-    
+
     // Variant text styles
     let variantTextStyle: TextStyle = {};
     switch (variant) {
@@ -131,7 +131,7 @@ export default function Button({
         variantTextStyle = { color: Colors.black };
         break;
     }
-    
+
     return {
       ...baseTextStyle,
       ...sizeTextStyle,
@@ -148,9 +148,9 @@ export default function Button({
       activeOpacity={0.8}
     >
       {loading ? (
-        <ActivityIndicator 
-          size="small" 
-          color={variant === 'primary' ? Colors.white : Colors.black} 
+        <ActivityIndicator
+          size="small"
+          color={variant === 'primary' ? Colors.white : Colors.black}
         />
       ) : (
         <View style={styles.content}>

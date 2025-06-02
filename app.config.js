@@ -1,35 +1,73 @@
-export default {
-  expo: {
-    name: 'bolt-expo-nativewind',
-    slug: 'bolt-expo-nativewind',
-    version: '1.0.0',
-    orientation: 'portrait',
-    icon: './assets/images/icon.png',
-    scheme: 'myapp',
-    userInterfaceStyle: 'automatic',
-    android: {
-      package: 'com.anonymous.boltexponativewind',
-      permissions: [
-        'android.permission.DETECT_SCREEN_CAPTURE',
-        'android.permission.RECORD_AUDIO',
-      ],
+export default ({ config }) => {
+  // It's good practice to define your intended package name here
+  const intendedPackageName = 'com.yabble.app'; // Or your chosen package name
+  const intendedProjectId = 'c1ed0f96-ee67-47ed-86ee-a1ae848d390a';
+
+  return {
+    ...config,
+    name: config.name || 'Yabble',
+    slug: config.slug || 'yabble',
+    version: config.version || '1.0.0',
+    orientation: config.orientation || 'portrait',
+    icon: config.icon || './assets/images/icon.png',
+    scheme: config.scheme || 'myapp',
+    userInterfaceStyle: config.userInterfaceStyle || 'automatic',
+    splash: {
+      ...(config.splash || {}),
+      image: config.splash?.image || './assets/images/splash.png',
+      resizeMode: config.splash?.resizeMode || 'contain',
+      backgroundColor: config.splash?.backgroundColor || '#ffffff',
     },
+    updates: {
+      ...(config.updates || {}),
+      fallbackToCacheTimeout: config.updates?.fallbackToCacheTimeout || 0,
+    },
+    assetBundlePatterns: config.assetBundlePatterns || ['**/*'],
     ios: {
-      supportsTablet: true,
+      ...(config.ios || {}),
+      supportsTablet: config.ios?.supportsTablet || true,
+      // You might need to add `bundleIdentifier` here for iOS builds later
+      // bundleIdentifier: config.ios?.bundleIdentifier || 'com.yabble.app',
+    },
+    android: {
+      ...(config.android || {}),
+      adaptiveIcon: {
+        ...(config.android?.adaptiveIcon || {}),
+        foregroundImage:
+          config.android?.adaptiveIcon?.foregroundImage ||
+          './assets/images/adaptive-icon.png',
+        backgroundColor:
+          config.android?.adaptiveIcon?.backgroundColor || '#FFFFFF',
+      },
+      package: config.android?.package || intendedPackageName, // Set the package name
+      // You might also want to set permissions explicitly if needed, merging with existing
+      // permissions: Array.from(new Set([...(config.android?.permissions || []), 'YOUR_PERMISSION_HERE'])),
     },
     web: {
-      bundler: 'metro',
-      output: 'single',
-      favicon: './assets/images/favicon.png',
+      ...(config.web || {}),
+      bundler: config.web?.bundler || 'metro',
+      output: config.web?.output || 'static',
+      favicon: config.web?.favicon || './assets/images/favicon.png',
     },
-    plugins: ['expo-router', 'expo-font'],
+    plugins: config.plugins || ['expo-router', 'expo-font'],
     experiments: {
-      typedRoutes: true,
+      ...(config.experiments || {}),
+      typedRoutes: config.experiments?.typedRoutes || true,
     },
     extra: {
-      supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
-      supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
-      elevenLabsApiKey: process.env.EXPO_PUBLIC_ELEVENLABS_API_KEY,
+      ...(config.extra || {}),
+      router: {
+        ...(config.extra?.router || {}),
+        origin: config.extra?.router?.origin || false,
+      },
+      eas: {
+        ...(config.extra?.eas || {}), // Keep this to merge other EAS properties
+        projectId: intendedProjectId, // Directly set the new ID
+      },
     },
-  },
+    androidNavigationBar: {
+      backgroundColor: '#000000',
+      barStyle: 'light-content',
+    },
+  };
 };

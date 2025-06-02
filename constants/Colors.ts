@@ -1,9 +1,10 @@
 const Colors = {
   black: '#000000',
   lightPeach: '#FFE6BC',
-  softCream: '#F7F1EA',
+  softCream: '#FFF9DE',
   white: '#FFFFFF',
-  
+  orange: '#ed9c01',
+
   // Additional UI colors
   gray: {
     100: '#F4F4F5',
