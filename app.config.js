@@ -14,7 +14,7 @@ export default ({ config }) => {
     userInterfaceStyle: config.userInterfaceStyle || 'automatic',
     splash: {
       ...(config.splash || {}),
-      image: config.splash?.image || './assets/images/splash.png',
+      image: config.splash?.image || './assets/images/yabble.png',
       resizeMode: config.splash?.resizeMode || 'contain',
       backgroundColor: config.splash?.backgroundColor || '#ffffff',
     },
