@@ -20,6 +20,7 @@ import type { Tables } from '../../lib/database';
 import { useFocusEffect } from '@react-navigation/native';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import * as MediaLibrary from 'expo-media-library';
 
 type FilterStatus = 'all' | 'completed' | 'draft';
 
@@ -132,12 +133,10 @@ export default function LibraryScreen() {
       return;
     }
 
-    const fileName = `${audiobook.title.replace(/[^a-zA-Z0-9\s]/g, '_')}.mp3`; // Sanitize filename
-    // Use cacheDirectory for temporary storage before sharing
+    const fileName = `${audiobook.title.replace(/[^a-zA-Z0-9\s]/g, '_')}.mp3`;
     const fileUri = FileSystem.cacheDirectory + fileName;
 
     if (Platform.OS === 'web') {
-      // Web download remains the same
       const link = document.createElement('a');
       link.href = audiobook.audio_url;
       link.download = fileName;
@@ -145,7 +144,6 @@ export default function LibraryScreen() {
       link.click();
       document.body.removeChild(link);
     } else {
-      // Native download and share
       try {
         Alert.alert(
           'Preparing Download',
@@ -153,13 +151,11 @@ export default function LibraryScreen() {
         );
 
         if (audiobook.audio_url.startsWith('data:')) {
-          // Handle Data URI: extract base64 and write to file
           const base64Data = audiobook.audio_url.split(',')[1];
           await FileSystem.writeAsStringAsync(fileUri, base64Data, {
             encoding: FileSystem.EncodingType.Base64,
           });
         } else {
-          // Handle HTTP/HTTPS URL: download the file
           const downloadResult = await FileSystem.downloadAsync(
             audiobook.audio_url,
             fileUri
@@ -169,21 +165,58 @@ export default function LibraryScreen() {
               'Download Failed',
               `Failed to download "${audiobook.title}". Status: ${downloadResult.status}`
             );
-            return; // Stop if download failed
+            return;
           }
         }
 
-        // Check if sharing is available and share the file
-        if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(fileUri, {
-            mimeType: 'audio/mpeg', // Important for Android to know the file type
-            dialogTitle: `Share or save "${audiobook.title}"`,
-          });
-        } else {
-          Alert.alert(
-            'Sharing Not Available',
-            'Sharing is not available on this device.'
-          );
+        if (Platform.OS === 'android') {
+          const { status } = await MediaLibrary.requestPermissionsAsync();
+          if (status === 'granted') {
+            try {
+              const asset = await MediaLibrary.createAssetAsync(fileUri);
+              // Optionally, try to move to a common album like 'Downloads' or your app's name
+              // This is a best-effort and behavior can vary by Android version/manufacturer
+              const album = await MediaLibrary.getAlbumAsync('Downloads');
+              if (album) {
+                await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
+              } else {
+                // Some devices might not have a standard 'Downloads' album accessible this way
+                // Or you could create one specific to your app
+                await MediaLibrary.createAlbumAsync(
+                  'Downloaded Audiobooks',
+                  asset,
+                  false
+                );
+              }
+              Alert.alert(
+                'Download Complete',
+                `"${audiobook.title}" saved to your device. Check your Files or Music app.`
+              );
+            } catch (saveError: any) {
+              console.error('MediaLibrary save error:', saveError);
+              Alert.alert(
+                'Save Error',
+                'Failed to save the audiobook to your library. It might be in app cache.'
+              );
+            }
+          } else {
+            Alert.alert(
+              'Permission Denied',
+              'Storage permission is required to save the audiobook.'
+            );
+          }
+        } else if (Platform.OS === 'ios') {
+          if (await Sharing.isAvailableAsync()) {
+            await Sharing.shareAsync(fileUri, {
+              mimeType: 'audio/mpeg',
+              dialogTitle: `Share or save "${audiobook.title}"`,
+            });
+          } else {
+            Alert.alert(
+              'Sharing Not Available',
+              'Sharing is not available on this device.'
+            );
+          }
         }
       } catch (e: any) {
         console.error('Download/Share error:', e);
