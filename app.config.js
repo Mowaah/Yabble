@@ -40,8 +40,13 @@ export default ({ config }) => {
           config.android?.adaptiveIcon?.backgroundColor || '#FFFFFF',
       },
       package: config.android?.package || intendedPackageName, // Set the package name
-      // You might also want to set permissions explicitly if needed, merging with existing
-      // permissions: Array.from(new Set([...(config.android?.permissions || []), 'YOUR_PERMISSION_HERE'])),
+      permissions: Array.from(
+        new Set([
+          ...(config.android?.permissions || []),
+          'READ_EXTERNAL_STORAGE',
+          'WRITE_EXTERNAL_STORAGE',
+        ])
+      ),
     },
     web: {
       ...(config.web || {}),

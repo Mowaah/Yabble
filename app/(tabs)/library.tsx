@@ -170,42 +170,20 @@ export default function LibraryScreen() {
         }
 
         if (Platform.OS === 'android') {
-          const { status } = await MediaLibrary.requestPermissionsAsync();
-          if (status === 'granted') {
-            try {
-              const asset = await MediaLibrary.createAssetAsync(fileUri);
-              // Optionally, try to move to a common album like 'Downloads' or your app's name
-              // This is a best-effort and behavior can vary by Android version/manufacturer
-              const album = await MediaLibrary.getAlbumAsync('Downloads');
-              if (album) {
-                await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
-              } else {
-                // Some devices might not have a standard 'Downloads' album accessible this way
-                // Or you could create one specific to your app
-                await MediaLibrary.createAlbumAsync(
-                  'Downloaded Audiobooks',
-                  asset,
-                  false
-                );
-              }
-              Alert.alert(
-                'Download Complete',
-                `"${audiobook.title}" saved to your device. Check your Files or Music app.`
-              );
-            } catch (saveError: any) {
-              console.error('MediaLibrary save error:', saveError);
-              Alert.alert(
-                'Save Error',
-                'Failed to save the audiobook to your library. It might be in app cache.'
-              );
-            }
+          // On Android, use the Share sheet for a more standard UX and to avoid the "modify" prompt.
+          if (await Sharing.isAvailableAsync()) {
+            await Sharing.shareAsync(fileUri, {
+              mimeType: 'audio/mpeg',
+              dialogTitle: `Save or share "${audiobook.title}"`,
+            });
           } else {
             Alert.alert(
-              'Permission Denied',
-              'Storage permission is required to save the audiobook.'
+              'Sharing Not Available',
+              'Sharing is not available on this device.'
             );
           }
         } else if (Platform.OS === 'ios') {
+          // iOS uses Sharing as before
           if (await Sharing.isAvailableAsync()) {
             await Sharing.shareAsync(fileUri, {
               mimeType: 'audio/mpeg',
