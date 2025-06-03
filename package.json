@@ -7,7 +7,9 @@
     "dev": "expo start",
     "dev:no-telemetry": "cross-env EXPO_NO_TELEMETRY=1 expo start",
     "build:web": "expo export --platform web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",
@@ -30,6 +32,7 @@
     "expo-camera": "~16.1.6",
     "expo-constants": "~17.1.6",
     "expo-crypto": "~14.1.1",
+    "expo-dev-client": "~5.1.8",
     "expo-document-picker": "~13.1.5",
     "expo-font": "~13.3.1",
     "expo-haptics": "~14.1.4",
@@ -44,6 +47,7 @@
     "expo-web-browser": "~14.1.6",
     "https-browserify": "^1.0.0",
     "lucide-react-native": "^0.323.0",
+    "mammoth": "^1.9.1",
     "metro": "^0.82.0",
     "metro-runtime": "0.76.8",
     "path-browserify": "^1.0.1",
@@ -53,6 +57,7 @@
     "react-native": "0.79.2",
     "react-native-crypto": "^2.2.0",
     "react-native-gesture-handler": "~2.24.0",
+    "react-native-pdf-extractor": "^0.2.6",
     "react-native-randombytes": "^3.6.1",
     "react-native-reanimated": "~3.17.4",
     "react-native-safe-area-context": "5.4.0",
@@ -67,7 +72,7 @@
     "url": "^0.11.4",
     "util": "^0.12.5",
     "xmlhttprequest": "^1.8.0",
-    "expo-dev-client": "~5.1.8"
+    "expo-sharing": "~13.1.5"
   },
   "devDependencies": {
     "@babel/core": "^7.26.0",

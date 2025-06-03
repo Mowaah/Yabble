@@ -1,18 +1,56 @@
-import React from 'react';
-import { StyleSheet, Text, View, ScrollView, Image, Pressable, ActivityIndicator } from 'react-native';
-import { 
-  User, Settings, CreditCard, Share2, 
-  ChevronRight, Volume2, Shield, LogOut
+import React, { useState } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  ScrollView,
+  Image,
+  Pressable,
+  ActivityIndicator,
+} from 'react-native';
+import {
+  User,
+  Settings,
+  CreditCard,
+  Share2,
+  ChevronRight,
+  Volume2,
+  Shield,
+  LogOut,
 } from 'lucide-react-native';
 import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import { useProfile } from '../../hooks/useProfile';
-import { signOut } from '../../lib/auth';
+import { signOut as supabaseSignOut } from '../../lib/auth';
+import { useRouter } from 'expo-router';
 
 export default function ProfileScreen() {
-  const { profile, isLoading, error } = useProfile();
+  const {
+    profile,
+    isLoading: profileLoading,
+    error: profileError,
+  } = useProfile();
+  const router = useRouter();
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
+
+  const handleSignOut = async () => {
+    setIsSigningOut(true);
+    setSignOutError(null);
+    try {
+      const { error } = await supabaseSignOut();
+      if (error) {
+        throw error;
+      }
+      router.replace('/(auth)/sign-in');
+    } catch (e: any) {
+      setSignOutError(e.message || 'Failed to sign out');
+    } finally {
+      setIsSigningOut(false);
+    }
+  };
 
   const menuItems = [
     {
@@ -44,11 +82,11 @@ export default function ProfileScreen() {
       icon: <LogOut size={20} color={Colors.error} />,
       title: 'Sign Out',
       textColor: Colors.error,
-      onPress: signOut,
+      onPress: handleSignOut,
     },
   ];
 
-  if (isLoading) {
+  if (profileLoading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={Colors.black} />
@@ -56,47 +94,59 @@ export default function ProfileScreen() {
     );
   }
 
-  if (error) {
+  if (profileError) {
     return (
       <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>Error loading profile: {error}</Text>
+        <Text style={styles.errorText}>
+          Error loading profile: {profileError}
+        </Text>
         <Button title="Try Again" onPress={() => window.location.reload()} />
       </View>
     );
   }
-  
+
   return (
-    <ScrollView 
+    <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.profileHeader}>
-        <Image 
-          source={{ uri: profile?.avatar_url || 'https://images.pexels.com/photos/614810/pexels-photo-614810.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2' }} 
-          style={styles.avatar} 
+        <Image
+          source={{
+            uri:
+              profile?.avatar_url ||
+              'https://images.pexels.com/photos/614810/pexels-photo-614810.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+          }}
+          style={styles.avatar}
         />
-        
+
         <View style={styles.profileInfo}>
-          <Text style={styles.profileName}>{profile?.name || 'Anonymous User'}</Text>
+          <Text style={styles.profileName}>
+            {profile?.name || 'Anonymous User'}
+          </Text>
           <Text style={styles.profileEmail}>{profile?.email}</Text>
-          
+
           <View style={styles.profileStats}>
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>{profile?.created_books || 0}</Text>
+              <Text style={styles.statValue}>
+                {profile?.created_books || 0}
+              </Text>
               <Text style={styles.statLabel}>Books</Text>
             </View>
-            
+
             <View style={styles.statDivider} />
-            
+
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>{profile?.is_premium ? 'Premium' : 'Free'}</Text>
+              <Text style={styles.statValue}>
+                {profile?.is_premium ? 'Premium' : 'Free'}
+              </Text>
               <Text style={styles.statLabel}>Plan</Text>
             </View>
           </View>
         </View>
       </View>
-      
+
       {!profile?.is_premium && (
         <Card style={styles.premiumCard}>
           <View style={styles.premiumContent}>
@@ -106,20 +156,20 @@ export default function ProfileScreen() {
                 Unlock all voices and advanced features
               </Text>
             </View>
-            
-            <Button 
-              title="Upgrade" 
-              variant="secondary" 
+
+            <Button
+              title="Upgrade"
+              variant="secondary"
               onPress={() => {}}
               style={styles.upgradeButton}
             />
           </View>
         </Card>
       )}
-      
+
       <Card style={styles.menuCard}>
         {menuItems.map((item, index) => (
-          <Pressable 
+          <Pressable
             key={index}
             style={({ pressed }) => [
               styles.menuItem,
@@ -130,18 +180,30 @@ export default function ProfileScreen() {
           >
             <View style={styles.menuItemContent}>
               <View style={styles.menuIconContainer}>{item.icon}</View>
-              <Text style={[
-                styles.menuItemText,
-                item.textColor ? { color: item.textColor } : null,
-              ]}>
+              <Text
+                style={[
+                  styles.menuItemText,
+                  item.textColor ? { color: item.textColor } : null,
+                ]}
+              >
                 {item.title}
               </Text>
             </View>
-            <ChevronRight size={18} color={Colors.gray[400]} />
+            {item.title === 'Sign Out' && isSigningOut ? (
+              <ActivityIndicator size="small" color={Colors.error} />
+            ) : (
+              <ChevronRight size={18} color={Colors.gray[400]} />
+            )}
           </Pressable>
         ))}
       </Card>
-      
+
+      {signOutError && (
+        <View style={styles.signOutErrorContainer}>
+          <Text style={styles.errorText}>{signOutError}</Text>
+        </View>
+      )}
+
       <View style={styles.appInfo}>
         <Text style={styles.appVersion}>StoryVoice v1.0.0</Text>
         <View style={styles.linksContainer}>
@@ -310,5 +372,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.gray[500],
     marginHorizontal: Layout.spacing.xs,
+  },
+  signOutErrorContainer: {
+    padding: Layout.spacing.md,
+    alignItems: 'center',
   },
 });

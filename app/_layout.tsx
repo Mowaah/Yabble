@@ -10,17 +10,9 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { AuthProvider } from '../contexts/AuthContext';
 import Colors from '../constants/Colors';
-import * as NavigationBar from 'expo-navigation-bar';
 
 export default function RootLayout() {
   useFrameworkReady();
-
-  useEffect(() => {
-    if (Platform.OS === 'android') {
-      NavigationBar.setPositionAsync('absolute');
-      NavigationBar.setStyle('light');
-    }
-  }, []);
 
   return (
     <SafeAreaProvider>

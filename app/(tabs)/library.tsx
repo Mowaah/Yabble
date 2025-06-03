@@ -1,5 +1,15 @@
 import React, { useState, useCallback } from 'react';
-import { StyleSheet, Text, View, FlatList, Pressable, ActivityIndicator, Share, Platform } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+  FlatList,
+  Pressable,
+  ActivityIndicator,
+  Share,
+  Platform,
+  Alert,
+} from 'react-native';
 import { Search, Filter, Headphones } from 'lucide-react-native';
 import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
@@ -8,6 +18,8 @@ import Input from '../../components/ui/Input';
 import { useAudiobooks } from '../../hooks/useAudiobooks';
 import type { Tables } from '../../lib/database';
 import { useFocusEffect } from '@react-navigation/native';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 
 type FilterStatus = 'all' | 'completed' | 'draft';
 
@@ -21,32 +33,35 @@ export default function LibraryScreen() {
       refreshAudiobooks();
     }, [])
   );
-  
-  const filteredBooks = audiobooks.filter(book => {
-    const matchesSearch = book.title.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter = filterStatus === 'all' || book.status === filterStatus;
+
+  const filteredBooks = audiobooks.filter((book) => {
+    const matchesSearch = book.title
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase());
+    const matchesFilter =
+      filterStatus === 'all' || book.status === filterStatus;
     return matchesSearch && matchesFilter;
   });
-  
+
   const renderFilterTab = (label: string, value: FilterStatus) => (
     <Pressable
       style={[
         styles.filterTab,
-        filterStatus === value && styles.activeFilterTab
+        filterStatus === value && styles.activeFilterTab,
       ]}
       onPress={() => setFilterStatus(value)}
     >
       <Text
         style={[
           styles.filterTabText,
-          filterStatus === value && styles.activeFilterTabText
+          filterStatus === value && styles.activeFilterTabText,
         ]}
       >
         {label}
       </Text>
     </Pressable>
   );
-  
+
   const renderEmptyState = () => {
     if (isLoading) {
       return (
@@ -73,14 +88,14 @@ export default function LibraryScreen() {
         </View>
         <Text style={styles.emptyTitle}>No audiobooks found</Text>
         <Text style={styles.emptyText}>
-          {searchQuery 
-            ? 'Try a different search term' 
+          {searchQuery
+            ? 'Try a different search term'
             : 'Start creating your first audiobook'}
         </Text>
       </View>
     );
   };
-  
+
   const handleShare = async (audiobook: Tables['audiobooks']['Row']) => {
     try {
       if (Platform.OS === 'web') {
@@ -93,7 +108,9 @@ export default function LibraryScreen() {
           });
         } else {
           // Fallback for browsers that don't support Web Share API
-          await navigator.clipboard.writeText(audiobook.audio_url || window.location.href);
+          await navigator.clipboard.writeText(
+            audiobook.audio_url || window.location.href
+          );
           alert('Link copied to clipboard!');
         }
       } else {
@@ -101,7 +118,7 @@ export default function LibraryScreen() {
         await Share.share({
           title: audiobook.title,
           message: `Check out my audiobook: ${audiobook.title}`,
-          url: audiobook.audio_url,
+          url: audiobook.audio_url ?? undefined,
         });
       }
     } catch (error) {
@@ -111,33 +128,83 @@ export default function LibraryScreen() {
 
   const handleDownload = async (audiobook: Tables['audiobooks']['Row']) => {
     if (!audiobook.audio_url) {
-      alert('Audio URL not available');
+      Alert.alert('Error', 'Audio URL not available');
       return;
     }
 
+    const fileName = `${audiobook.title.replace(/[^a-zA-Z0-9\s]/g, '_')}.mp3`; // Sanitize filename
+    // Use cacheDirectory for temporary storage before sharing
+    const fileUri = FileSystem.cacheDirectory + fileName;
+
     if (Platform.OS === 'web') {
-      // Create a temporary anchor element for download
+      // Web download remains the same
       const link = document.createElement('a');
       link.href = audiobook.audio_url;
-      link.download = `${audiobook.title}.mp3`;
+      link.download = fileName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     } else {
-      // For native platforms, you might want to use expo-file-system
-      alert('Download feature is only available on web platform');
+      // Native download and share
+      try {
+        Alert.alert(
+          'Preparing Download',
+          `Starting download for "${audiobook.title}"...`
+        );
+
+        if (audiobook.audio_url.startsWith('data:')) {
+          // Handle Data URI: extract base64 and write to file
+          const base64Data = audiobook.audio_url.split(',')[1];
+          await FileSystem.writeAsStringAsync(fileUri, base64Data, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+        } else {
+          // Handle HTTP/HTTPS URL: download the file
+          const downloadResult = await FileSystem.downloadAsync(
+            audiobook.audio_url,
+            fileUri
+          );
+          if (downloadResult.status !== 200) {
+            Alert.alert(
+              'Download Failed',
+              `Failed to download "${audiobook.title}". Status: ${downloadResult.status}`
+            );
+            return; // Stop if download failed
+          }
+        }
+
+        // Check if sharing is available and share the file
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(fileUri, {
+            mimeType: 'audio/mpeg', // Important for Android to know the file type
+            dialogTitle: `Share or save "${audiobook.title}"`,
+          });
+        } else {
+          Alert.alert(
+            'Sharing Not Available',
+            'Sharing is not available on this device.'
+          );
+        }
+      } catch (e: any) {
+        console.error('Download/Share error:', e);
+        Alert.alert('Error', `An error occurred: ${e.message}`);
+      }
     }
   };
-  
-  const renderAudiobookItem = ({ item }: { item: Tables['audiobooks']['Row'] }) => (
-    <AudiobookCard 
-      book={item} 
+
+  const renderAudiobookItem = ({
+    item,
+  }: {
+    item: Tables['audiobooks']['Row'];
+  }) => (
+    <AudiobookCard
+      book={item}
       onShare={() => handleShare(item)}
       onDownload={() => handleDownload(item)}
       onDelete={refreshAudiobooks}
     />
   );
-  
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -149,22 +216,22 @@ export default function LibraryScreen() {
           containerStyle={styles.searchContainer}
           leftIcon={<Search size={18} color={Colors.gray[400]} />}
         />
-        
+
         <View style={styles.filterContainer}>
           {renderFilterTab('All', 'all')}
           {renderFilterTab('Completed', 'completed')}
           {renderFilterTab('Drafts', 'draft')}
-          
+
           <Pressable style={styles.filterButton}>
             <Filter size={18} color={Colors.black} />
           </Pressable>
         </View>
       </View>
-      
+
       <FlatList
         data={filteredBooks}
         renderItem={renderAudiobookItem}
-        keyExtractor={item => item.id}
+        keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={renderEmptyState}
