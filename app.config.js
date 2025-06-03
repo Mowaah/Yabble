@@ -5,7 +5,7 @@ export default ({ config }) => {
 
   return {
     ...config,
-    name: config.name || 'Yabble',
+    name: 'Yabble',
     slug: config.slug || 'yabble',
     version: config.version || '1.0.0',
     orientation: config.orientation || 'portrait',
@@ -16,7 +16,7 @@ export default ({ config }) => {
       ...(config.splash || {}),
       image: config.splash?.image || './assets/images/yabble.png',
       resizeMode: config.splash?.resizeMode || 'contain',
-      backgroundColor: config.splash?.backgroundColor || '#ffffff',
+      backgroundColor: config.splash?.backgroundColor || '#FFF9DE',
     },
     updates: {
       ...(config.updates || {}),
