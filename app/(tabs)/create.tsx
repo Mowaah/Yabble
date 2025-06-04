@@ -173,7 +173,7 @@ export default function CreateScreen() {
               multiline
               numberOfLines={8}
               textAlignVertical="top"
-              style={styles.textInput}
+              inputStyle={{ minHeight: 120 }}
             />
           </View>
         );
@@ -405,11 +405,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.black,
     marginRight: Layout.spacing.sm,
-  },
-  textInput: {
-    minHeight: 120,
-    backgroundColor: Colors.white,
-    padding: Layout.spacing.md,
   },
   titleContainer: {
     marginBottom: Layout.spacing.lg,

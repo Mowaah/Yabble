@@ -1,6 +1,21 @@
 import React, { useState, useCallback } from 'react';
-import { StyleSheet, Text, View, FlatList, Pressable, ActivityIndicator, Share, Platform } from 'react-native';
-import { Search, Filter, Headphones } from 'lucide-react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+  FlatList,
+  Pressable,
+  ActivityIndicator,
+  Platform,
+  Modal,
+} from 'react-native';
+import {
+  Search,
+  Filter,
+  Headphones,
+  CheckCircle2,
+  XCircle,
+} from 'lucide-react-native';
 import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
 import AudiobookCard from '../../components/audiobook/AudiobookCard';
@@ -8,45 +23,59 @@ import Input from '../../components/ui/Input';
 import { useAudiobooks } from '../../hooks/useAudiobooks';
 import type { Tables } from '../../lib/database';
 import { useFocusEffect } from '@react-navigation/native';
+import { prepareAudioFile, FilePreparationError } from '../../utils/fileUtils';
+import {
+  saveAudioToDevice,
+  shareAudioFile,
+  MediaError,
+} from '../../utils/mediaUtils';
 
 type FilterStatus = 'all' | 'completed' | 'draft';
+type ModalStatus = 'idle' | 'loading' | 'success' | 'error';
 
 export default function LibraryScreen() {
   const { audiobooks, isLoading, error, refreshAudiobooks } = useAudiobooks();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
 
+  const [showModal, setShowModal] = useState(false);
+  const [modalStatus, setModalStatus] = useState<ModalStatus>('idle');
+  const [modalMessage, setModalMessage] = useState('');
+
   useFocusEffect(
     useCallback(() => {
       refreshAudiobooks();
     }, [])
   );
-  
-  const filteredBooks = audiobooks.filter(book => {
-    const matchesSearch = book.title.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter = filterStatus === 'all' || book.status === filterStatus;
+
+  const filteredBooks = audiobooks.filter((book) => {
+    const matchesSearch = book.title
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase());
+    const matchesFilter =
+      filterStatus === 'all' || book.status === filterStatus;
     return matchesSearch && matchesFilter;
   });
-  
+
   const renderFilterTab = (label: string, value: FilterStatus) => (
     <Pressable
       style={[
         styles.filterTab,
-        filterStatus === value && styles.activeFilterTab
+        filterStatus === value && styles.activeFilterTab,
       ]}
       onPress={() => setFilterStatus(value)}
     >
       <Text
         style={[
           styles.filterTabText,
-          filterStatus === value && styles.activeFilterTabText
+          filterStatus === value && styles.activeFilterTabText,
         ]}
       >
         {label}
       </Text>
     </Pressable>
   );
-  
+
   const renderEmptyState = () => {
     if (isLoading) {
       return (
@@ -73,73 +102,192 @@ export default function LibraryScreen() {
         </View>
         <Text style={styles.emptyTitle}>No audiobooks found</Text>
         <Text style={styles.emptyText}>
-          {searchQuery 
-            ? 'Try a different search term' 
+          {searchQuery
+            ? 'Try a different search term'
             : 'Start creating your first audiobook'}
         </Text>
       </View>
     );
   };
-  
+
   const handleShare = async (audiobook: Tables['audiobooks']['Row']) => {
+    setShowModal(true);
+    setModalStatus('loading');
+    setModalMessage(`Preparing "${audiobook.title}" for sharing...`);
+
     try {
+      const localFileUriToShare = await prepareAudioFile(
+        audiobook.audio_url,
+        audiobook.title,
+        'sharing'
+      );
+
+      // Proceed with platform-specific sharing
       if (Platform.OS === 'web') {
-        // Web sharing
         if (navigator.share) {
           await navigator.share({
             title: audiobook.title,
-            text: 'Check out my audiobook!',
+            text: `Check out my audiobook: ${audiobook.title}`,
             url: audiobook.audio_url || window.location.href,
           });
+          setModalStatus('success');
+          setModalMessage('Shared successfully!');
         } else {
-          // Fallback for browsers that don't support Web Share API
-          await navigator.clipboard.writeText(audiobook.audio_url || window.location.href);
-          alert('Link copied to clipboard!');
+          await navigator.clipboard.writeText(
+            audiobook.audio_url || window.location.href
+          );
+          setModalStatus('success');
+          setModalMessage('Link copied to clipboard!');
         }
       } else {
-        // Native sharing
-        await Share.share({
-          title: audiobook.title,
-          message: `Check out my audiobook: ${audiobook.title}`,
-          url: audiobook.audio_url,
-        });
+        // Native sharing using new utility
+        await shareAudioFile(localFileUriToShare, audiobook.title);
+        // If shareAudioFile completes without error, the share sheet was presented.
+        // For native, we often close the modal once the share sheet is up, rather than waiting for a 'success' state from the share itself.
+        closeModal();
       }
-    } catch (error) {
-      console.error('Error sharing:', error);
+    } catch (error: any) {
+      console.error('Sharing process error:', error);
+      if (
+        error instanceof FilePreparationError ||
+        error instanceof MediaError
+      ) {
+        setModalStatus('error');
+        setModalMessage(error.message);
+      } else {
+        setModalStatus('error');
+        setModalMessage(error.message || 'Failed to initiate sharing.');
+      }
     }
   };
 
   const handleDownload = async (audiobook: Tables['audiobooks']['Row']) => {
-    if (!audiobook.audio_url) {
-      alert('Audio URL not available');
-      return;
-    }
+    setShowModal(true);
+    setModalStatus('loading');
+    setModalMessage(`Downloading "${audiobook.title}"...`);
 
-    if (Platform.OS === 'web') {
-      // Create a temporary anchor element for download
-      const link = document.createElement('a');
-      link.href = audiobook.audio_url;
-      link.download = `${audiobook.title}.mp3`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } else {
-      // For native platforms, you might want to use expo-file-system
-      alert('Download feature is only available on web platform');
+    try {
+      const localFileUriForDownload = await prepareAudioFile(
+        audiobook.audio_url,
+        audiobook.title,
+        'download'
+      );
+
+      // At this point, file is prepared. Proceed with platform-specific saving.
+      if (Platform.OS === 'android') {
+        await saveAudioToDevice(localFileUriForDownload, audiobook.title);
+        setModalStatus('success');
+        setModalMessage(
+          `"${audiobook.title}" saved. Check your device's Files app or media gallery.`
+        );
+      } else if (Platform.OS === 'ios') {
+        // On iOS, saving is typically done via the share sheet.
+        await shareAudioFile(
+          localFileUriForDownload,
+          audiobook.title,
+          `Save: ${audiobook.title}`
+        );
+        setModalStatus('success');
+        setModalMessage(
+          'Ready to save. Choose an option from the share menu (e.g., Save to Files).'
+        );
+      } else if (Platform.OS === 'web') {
+        const link = document.createElement('a');
+        // For web, it's better to use the original URL for direct download if it's not a data URI
+        // as localFileUriForDownload might be a file:// URI from cache which browsers block for direct linking.
+        if (audiobook.audio_url && !audiobook.audio_url.startsWith('data:')) {
+          link.href = audiobook.audio_url;
+        } else {
+          // If it was a data URI that got written to cache, downloading from localFileUriForDownload
+          // directly via href is tricky. A robust solution would involve reading it to a blob.
+          // For now, we alert that this specific case (cached data URI for web download) is complex.
+          // Or, we can try to use the localFileUri, knowing it might not be ideal for all browsers.
+          console.warn(
+            'Web download from cached data URI is not fully optimized. Using original URL if possible.'
+          );
+          link.href = localFileUriForDownload; // Attempt, but might be problematic
+          // A better approach if localFileUriForDownload MUST be used:
+          // const blob = await FileSystem.readAsStringAsync(localFileUriForDownload, { encoding: FileSystem.EncodingType.Base64 });
+          // link.href = `data:audio/mpeg;base64,${blob}`;
+        }
+        link.download = `${audiobook.title.replace(
+          /[^a-zA-Z0-9\s]/g,
+          '_'
+        )}.mp3`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setModalStatus('success');
+        setModalMessage(`"${audiobook.title}" download initiated in browser.`);
+      }
+    } catch (error: any) {
+      console.error('Download process error:', error);
+      if (
+        error instanceof FilePreparationError ||
+        error instanceof MediaError
+      ) {
+        setModalStatus('error');
+        setModalMessage(error.message);
+      } else {
+        setModalStatus('error');
+        setModalMessage(
+          error.message || 'An error occurred during the download process.'
+        );
+      }
     }
   };
-  
-  const renderAudiobookItem = ({ item }: { item: Tables['audiobooks']['Row'] }) => (
-    <AudiobookCard 
-      book={item} 
+
+  const closeModal = () => {
+    setShowModal(false);
+    setModalStatus('idle');
+    setModalMessage('');
+  };
+
+  const renderAudiobookItem = ({
+    item,
+  }: {
+    item: Tables['audiobooks']['Row'];
+  }) => (
+    <AudiobookCard
+      book={item}
       onShare={() => handleShare(item)}
       onDownload={() => handleDownload(item)}
       onDelete={refreshAudiobooks}
     />
   );
-  
+
   return (
     <View style={styles.container}>
+      <Modal
+        transparent={true}
+        animationType="fade"
+        visible={showModal}
+        onRequestClose={closeModal}
+      >
+        <View style={styles.modalBackground}>
+          <View style={styles.modalContent}>
+            {modalStatus === 'loading' && (
+              <ActivityIndicator
+                size="large"
+                color={Colors.orange || '#FF8C00'}
+              />
+            )}
+            {modalStatus === 'success' && (
+              <CheckCircle2 size={48} color={Colors.success || 'green'} />
+            )}
+            {modalStatus === 'error' && (
+              <XCircle size={48} color={Colors.error || 'red'} />
+            )}
+            <Text style={styles.loadingText}>{modalMessage}</Text>
+            {(modalStatus === 'success' || modalStatus === 'error') && (
+              <Pressable style={styles.okButton} onPress={closeModal}>
+                <Text style={styles.okButtonText}>OK</Text>
+              </Pressable>
+            )}
+          </View>
+        </View>
+      </Modal>
+
       <View style={styles.header}>
         <Text style={styles.title}>Your Library</Text>
         <Input
@@ -149,22 +297,22 @@ export default function LibraryScreen() {
           containerStyle={styles.searchContainer}
           leftIcon={<Search size={18} color={Colors.gray[400]} />}
         />
-        
+
         <View style={styles.filterContainer}>
           {renderFilterTab('All', 'all')}
           {renderFilterTab('Completed', 'completed')}
           {renderFilterTab('Drafts', 'draft')}
-          
+
           <Pressable style={styles.filterButton}>
             <Filter size={18} color={Colors.black} />
           </Pressable>
         </View>
       </View>
-      
+
       <FlatList
         data={filteredBooks}
         renderItem={renderAudiobookItem}
-        keyExtractor={item => item.id}
+        keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={renderEmptyState}
@@ -265,5 +413,44 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.gray[500],
     textAlign: 'center',
+  },
+  modalBackground: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    backgroundColor: Colors.white,
+    padding: Layout.spacing.lg,
+    borderRadius: Layout.borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 5,
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    width: '80%',
+    minHeight: 150,
+  },
+  loadingText: {
+    marginTop: Layout.spacing.md,
+    fontSize: 16,
+    color: Colors.black,
+    textAlign: 'center',
+    paddingHorizontal: Layout.spacing.sm,
+  },
+  okButton: {
+    marginTop: Layout.spacing.lg,
+    backgroundColor: Colors.orange || '#FF8C00',
+    paddingVertical: Layout.spacing.sm,
+    paddingHorizontal: Layout.spacing.xl,
+    borderRadius: Layout.borderRadius.md,
+  },
+  okButtonText: {
+    color: Colors.white,
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

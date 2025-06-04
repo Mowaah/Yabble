@@ -1,0 +1,15 @@
+# Bolt specific
+.bolt/
+.bolt_temp/
+**/.bolt/
+**/.bolt_temp/
+
+# Common ignores
+node_modules/
+.git/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig 
