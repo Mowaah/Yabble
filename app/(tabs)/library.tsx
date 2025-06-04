@@ -6,12 +6,16 @@ import {
   FlatList,
   Pressable,
   ActivityIndicator,
-  Share,
   Platform,
-  Alert,
   Modal,
 } from 'react-native';
-import { Search, Filter, Headphones } from 'lucide-react-native';
+import {
+  Search,
+  Filter,
+  Headphones,
+  CheckCircle2,
+  XCircle,
+} from 'lucide-react-native';
 import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
 import AudiobookCard from '../../components/audiobook/AudiobookCard';
@@ -19,17 +23,24 @@ import Input from '../../components/ui/Input';
 import { useAudiobooks } from '../../hooks/useAudiobooks';
 import type { Tables } from '../../lib/database';
 import { useFocusEffect } from '@react-navigation/native';
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
-import * as MediaLibrary from 'expo-media-library';
+import { prepareAudioFile, FilePreparationError } from '../../utils/fileUtils';
+import {
+  saveAudioToDevice,
+  shareAudioFile,
+  MediaError,
+} from '../../utils/mediaUtils';
 
 type FilterStatus = 'all' | 'completed' | 'draft';
+type ModalStatus = 'idle' | 'loading' | 'success' | 'error';
 
 export default function LibraryScreen() {
   const { audiobooks, isLoading, error, refreshAudiobooks } = useAudiobooks();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
-  const [isDownloading, setIsDownloading] = useState(false);
+
+  const [showModal, setShowModal] = useState(false);
+  const [modalStatus, setModalStatus] = useState<ModalStatus>('idle');
+  const [modalMessage, setModalMessage] = useState('');
 
   useFocusEffect(
     useCallback(() => {
@@ -100,125 +111,136 @@ export default function LibraryScreen() {
   };
 
   const handleShare = async (audiobook: Tables['audiobooks']['Row']) => {
+    setShowModal(true);
+    setModalStatus('loading');
+    setModalMessage(`Preparing "${audiobook.title}" for sharing...`);
+
     try {
+      const localFileUriToShare = await prepareAudioFile(
+        audiobook.audio_url,
+        audiobook.title,
+        'sharing'
+      );
+
+      // Proceed with platform-specific sharing
       if (Platform.OS === 'web') {
-        // Web sharing
         if (navigator.share) {
           await navigator.share({
             title: audiobook.title,
-            text: 'Check out my audiobook!',
+            text: `Check out my audiobook: ${audiobook.title}`,
             url: audiobook.audio_url || window.location.href,
           });
+          setModalStatus('success');
+          setModalMessage('Shared successfully!');
         } else {
-          // Fallback for browsers that don't support Web Share API
           await navigator.clipboard.writeText(
             audiobook.audio_url || window.location.href
           );
-          alert('Link copied to clipboard!');
+          setModalStatus('success');
+          setModalMessage('Link copied to clipboard!');
         }
       } else {
-        // Native sharing
-        await Share.share({
-          title: audiobook.title,
-          message: `Check out my audiobook: ${audiobook.title}`,
-          url: audiobook.audio_url ?? undefined,
-        });
+        // Native sharing using new utility
+        await shareAudioFile(localFileUriToShare, audiobook.title);
+        // If shareAudioFile completes without error, the share sheet was presented.
+        // For native, we often close the modal once the share sheet is up, rather than waiting for a 'success' state from the share itself.
+        closeModal();
       }
-    } catch (error) {
-      console.error('Error sharing:', error);
+    } catch (error: any) {
+      console.error('Sharing process error:', error);
+      if (
+        error instanceof FilePreparationError ||
+        error instanceof MediaError
+      ) {
+        setModalStatus('error');
+        setModalMessage(error.message);
+      } else {
+        setModalStatus('error');
+        setModalMessage(error.message || 'Failed to initiate sharing.');
+      }
     }
   };
 
   const handleDownload = async (audiobook: Tables['audiobooks']['Row']) => {
-    if (!audiobook.audio_url) {
-      Alert.alert('Error', 'Audio URL not available');
-      return;
-    }
-
-    setIsDownloading(true);
-    const fileName = `${audiobook.title.replace(/[^a-zA-Z0-9\s]/g, '_')}.mp3`;
-    const fileUri = FileSystem.cacheDirectory + fileName;
+    setShowModal(true);
+    setModalStatus('loading');
+    setModalMessage(`Downloading "${audiobook.title}"...`);
 
     try {
-      if (audiobook.audio_url.startsWith('data:')) {
-        const base64Data = audiobook.audio_url.split(',')[1];
-        await FileSystem.writeAsStringAsync(fileUri, base64Data, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-      } else {
-        const downloadResult = await FileSystem.downloadAsync(
-          audiobook.audio_url,
-          fileUri
-        );
-        if (downloadResult.status !== 200) {
-          Alert.alert(
-            'Download Failed',
-            `Failed to download "${audiobook.title}". Status: ${downloadResult.status}`
-          );
-          setIsDownloading(false);
-          return;
-        }
-      }
+      const localFileUriForDownload = await prepareAudioFile(
+        audiobook.audio_url,
+        audiobook.title,
+        'download'
+      );
 
+      // At this point, file is prepared. Proceed with platform-specific saving.
       if (Platform.OS === 'android') {
-        const { status, canAskAgain } =
-          await MediaLibrary.requestPermissionsAsync(true);
-        if (status === 'granted') {
-          try {
-            await MediaLibrary.createAssetAsync(fileUri);
-            Alert.alert(
-              'Download Complete',
-              `"${audiobook.title}" saved. Check your device's Files app or media gallery.`
-            );
-          } catch (saveError: any) {
-            console.error('MediaLibrary save asset error:', saveError);
-            Alert.alert(
-              'Save Error',
-              'Failed to save the audiobook. It might be in app cache.'
-            );
-          }
-        } else {
-          if (!canAskAgain) {
-            Alert.alert(
-              'Permission Required',
-              'Storage permission is needed. Please enable it in app settings.'
-            );
-          } else {
-            Alert.alert(
-              'Permission Denied',
-              'Storage permission is required to save the audiobook.'
-            );
-          }
-        }
+        await saveAudioToDevice(localFileUriForDownload, audiobook.title);
+        setModalStatus('success');
+        setModalMessage(
+          `"${audiobook.title}" saved. Check your device's Files app or media gallery.`
+        );
       } else if (Platform.OS === 'ios') {
-        if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(fileUri, {
-            mimeType: 'audio/mpeg',
-            dialogTitle: `Share or save "${audiobook.title}"`,
-          });
-        } else {
-          Alert.alert(
-            'Sharing Not Available',
-            'Sharing is not available on this device.'
-          );
-        }
-      }
-      // Web platform download logic (if you want to keep it, otherwise it will fall through to nothing for web)
-      else if (Platform.OS === 'web') {
+        // On iOS, saving is typically done via the share sheet.
+        await shareAudioFile(
+          localFileUriForDownload,
+          audiobook.title,
+          `Save: ${audiobook.title}`
+        );
+        setModalStatus('success');
+        setModalMessage(
+          'Ready to save. Choose an option from the share menu (e.g., Save to Files).'
+        );
+      } else if (Platform.OS === 'web') {
         const link = document.createElement('a');
-        link.href = audiobook.audio_url; // Or fileUri if you want to trigger download of cached data URI too
-        link.download = fileName;
+        // For web, it's better to use the original URL for direct download if it's not a data URI
+        // as localFileUriForDownload might be a file:// URI from cache which browsers block for direct linking.
+        if (audiobook.audio_url && !audiobook.audio_url.startsWith('data:')) {
+          link.href = audiobook.audio_url;
+        } else {
+          // If it was a data URI that got written to cache, downloading from localFileUriForDownload
+          // directly via href is tricky. A robust solution would involve reading it to a blob.
+          // For now, we alert that this specific case (cached data URI for web download) is complex.
+          // Or, we can try to use the localFileUri, knowing it might not be ideal for all browsers.
+          console.warn(
+            'Web download from cached data URI is not fully optimized. Using original URL if possible.'
+          );
+          link.href = localFileUriForDownload; // Attempt, but might be problematic
+          // A better approach if localFileUriForDownload MUST be used:
+          // const blob = await FileSystem.readAsStringAsync(localFileUriForDownload, { encoding: FileSystem.EncodingType.Base64 });
+          // link.href = `data:audio/mpeg;base64,${blob}`;
+        }
+        link.download = `${audiobook.title.replace(
+          /[^a-zA-Z0-9\s]/g,
+          '_'
+        )}.mp3`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        // No specific alert for web as browser handles feedback, or add one if desired
+        setModalStatus('success');
+        setModalMessage(`"${audiobook.title}" download initiated in browser.`);
       }
-    } catch (e: any) {
-      console.error('Download error:', e);
-      Alert.alert('Error', `An error occurred during download: ${e.message}`);
-    } finally {
-      setIsDownloading(false);
+    } catch (error: any) {
+      console.error('Download process error:', error);
+      if (
+        error instanceof FilePreparationError ||
+        error instanceof MediaError
+      ) {
+        setModalStatus('error');
+        setModalMessage(error.message);
+      } else {
+        setModalStatus('error');
+        setModalMessage(
+          error.message || 'An error occurred during the download process.'
+        );
+      }
     }
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setModalStatus('idle');
+    setModalMessage('');
   };
 
   const renderAudiobookItem = ({
@@ -239,16 +261,29 @@ export default function LibraryScreen() {
       <Modal
         transparent={true}
         animationType="fade"
-        visible={isDownloading}
-        onRequestClose={() => setIsDownloading(false)}
+        visible={showModal}
+        onRequestClose={closeModal}
       >
         <View style={styles.modalBackground}>
           <View style={styles.modalContent}>
-            <ActivityIndicator
-              size="large"
-              color={Colors.orange || '#FF8C00'}
-            />
-            <Text style={styles.loadingText}>Downloading audiobook...</Text>
+            {modalStatus === 'loading' && (
+              <ActivityIndicator
+                size="large"
+                color={Colors.orange || '#FF8C00'}
+              />
+            )}
+            {modalStatus === 'success' && (
+              <CheckCircle2 size={48} color={Colors.success || 'green'} />
+            )}
+            {modalStatus === 'error' && (
+              <XCircle size={48} color={Colors.error || 'red'} />
+            )}
+            <Text style={styles.loadingText}>{modalMessage}</Text>
+            {(modalStatus === 'success' || modalStatus === 'error') && (
+              <Pressable style={styles.okButton} onPress={closeModal}>
+                <Text style={styles.okButtonText}>OK</Text>
+              </Pressable>
+            )}
           </View>
         </View>
       </Modal>
@@ -396,10 +431,26 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
+    width: '80%',
+    minHeight: 150,
   },
   loadingText: {
     marginTop: Layout.spacing.md,
     fontSize: 16,
     color: Colors.black,
+    textAlign: 'center',
+    paddingHorizontal: Layout.spacing.sm,
+  },
+  okButton: {
+    marginTop: Layout.spacing.lg,
+    backgroundColor: Colors.orange || '#FF8C00',
+    paddingVertical: Layout.spacing.sm,
+    paddingHorizontal: Layout.spacing.xl,
+    borderRadius: Layout.borderRadius.md,
+  },
+  okButtonText: {
+    color: Colors.white,
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

@@ -1,7 +1,7 @@
 const Colors = {
   black: '#000000',
   lightPeach: '#FFE6BC',
-  softCream: '#FFF9DE',
+  softCream: '#FCEFCB',
   white: '#FFFFFF',
   orange: '#ed9c01',
 
