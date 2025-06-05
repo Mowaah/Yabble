@@ -1,6 +1,3 @@
-// Import polyfills before anything else
-import '../polyfills';
-
 import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -22,7 +19,10 @@ export default function RootLayout() {
             screenOptions={{
               headerShown: false,
               contentStyle: { backgroundColor: Colors.softCream },
-              animation: 'slide_from_right',
+              animation: Platform.select({
+                web: 'none',
+                default: 'slide_from_right',
+              }),
             }}
           >
             <Stack.Screen name="(auth)" options={{ headerShown: false }} />
