@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GoTrueClient, Session } from '@supabase/gotrue-js';
@@ -13,6 +14,23 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
+class EmptyStorage {
+  getItem(key: string): Promise<string | null> {
+    return Promise.resolve(null);
+  }
+  setItem(key: string, value: string): Promise<void> {
+    return Promise.resolve();
+  }
+  removeItem(key: string): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
+const storage =
+  Platform.OS === 'web' && typeof window === 'undefined'
+    ? new EmptyStorage()
+    : AsyncStorage;
+
 export const auth = new GoTrueClient({
   url: `${supabaseUrl}/auth/v1`,
   headers: {
@@ -21,7 +39,7 @@ export const auth = new GoTrueClient({
   },
   autoRefreshToken: true,
   persistSession: true,
-  storage: AsyncStorage,
+  storage: storage,
   detectSessionInUrl: false,
 });
 
