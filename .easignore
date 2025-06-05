@@ -1,9 +1,3 @@
-# Bolt specific
-.bolt/
-.bolt_temp/
-**/.bolt/
-**/.bolt_temp/
-
 # Common ignores
 node_modules/
 .git/

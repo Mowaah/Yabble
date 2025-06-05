@@ -27,7 +27,7 @@ export default ({ config }) => {
       ...(config.ios || {}),
       supportsTablet: config.ios?.supportsTablet || true,
       // You might need to add `bundleIdentifier` here for iOS builds later
-      // bundleIdentifier: config.ios?.bundleIdentifier || 'com.yabble.app',
+      bundleIdentifier: config.ios?.bundleIdentifier || 'com.yabble.app',
     },
     android: {
       ...(config.android || {}),
