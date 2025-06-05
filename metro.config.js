@@ -52,11 +52,6 @@ config.resolver = {
   unstable_disableHierarchicalLookup: true,
 };
 
-// Caching configuration
-config.cacheStores = [];
-config.resetCache = false;
-config.cacheVersion = '1.0.0';
-
 // Performance settings
 config.maxWorkers = 4;
 config.transformer.workerPath = require.resolve('metro/src/DeltaBundler/Worker');
