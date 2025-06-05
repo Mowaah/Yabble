@@ -4,12 +4,12 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "EXPO_USE_STABLE_METRO=1 expo start --clear",
-    "dev:no-telemetry": "cross-env EXPO_NO_TELEMETRY=1 EXPO_USE_STABLE_METRO=1 expo start --clear",
-    "build:web": "expo export --platform web",
-    "lint": "expo lint",
-    "android": "expo run:android",
-    "ios": "expo run:ios"
+    "dev": "EXPO_USE_STABLE_METRO=1 npx expo start --clear",
+    "dev:no-telemetry": "cross-env EXPO_NO_TELEMETRY=1 EXPO_USE_STABLE_METRO=1 npx expo start --clear",
+    "build:web": "npx expo export --platform web",
+    "lint": "npx expo lint",
+    "android": "npx expo run:android",
+    "ios": "npx expo run:ios"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",
