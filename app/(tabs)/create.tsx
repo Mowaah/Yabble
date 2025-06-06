@@ -6,6 +6,7 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Pressable,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
@@ -13,15 +14,21 @@ import {
   Mic,
   Link as LinkIcon,
   Text as TextIcon,
+  Bot,
+  ChevronRight,
 } from 'lucide-react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
-import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import { useCreateAudiobook } from '../../hooks/useCreateAudiobook';
 import { useAuth } from '../../contexts/AuthContext';
+import {
+  processDocument,
+  validateTextForTTS,
+  DocumentProcessingError,
+} from '../../utils/documentProcessor';
 
 enum InputMethod {
   TEXT = 'text',
@@ -42,108 +49,104 @@ export default function CreateScreen() {
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [isProcessingFile, setIsProcessingFile] = useState(false);
 
-  const handleTextInput = () => {
-    setInputMethod(InputMethod.TEXT);
+  const handleMethodSelect = (method: InputMethod) => {
+    if (isProcessingFile) return;
+    if (inputMethod !== method) {
+      setText('');
+      setUrl('');
+      setSelectedFile(null);
+      setInputMethod(method);
+    }
   };
 
   const handleFileInput = async () => {
+    handleMethodSelect(InputMethod.FILE);
     try {
+      setIsProcessingFile(true);
       const result = await DocumentPicker.getDocumentAsync({
         type: [
           'text/plain',
-          'application/pdf',
           'application/msword',
           'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/pdf',
         ],
         copyToCacheDirectory: true,
       });
 
-      if (
-        result.canceled === true ||
-        !result.assets ||
-        result.assets.length === 0
-      ) {
+      if (result.canceled || !result.assets || result.assets.length === 0) {
+        setInputMethod(null);
         return;
       }
 
       const asset = result.assets[0];
       setSelectedFile(asset.name);
-      setInputMethod(InputMethod.FILE);
-
-      const response = await fetch(asset.uri);
-      const fileText = await response.text();
-      setText(fileText);
-    } catch (error) {
-      console.error('File input error:', error);
-      Alert.alert(
-        'Error',
-        'Could not read file. Please ensure it is a valid type and try again.'
+      const extractedText = await processDocument(
+        asset.uri,
+        asset.mimeType,
+        asset.name
       );
+
+      const validation = validateTextForTTS(extractedText);
+      if (!validation.isValid) {
+        Alert.alert('File Error', validation.message || 'Invalid text');
+        setSelectedFile(null);
+        setInputMethod(null);
+        return;
+      }
+      setText(extractedText);
+    } catch (error: any) {
+      const errorMessage =
+        error instanceof DocumentProcessingError
+          ? error.message
+          : 'Could not process the selected file.';
+      Alert.alert('File Processing Error', errorMessage);
+      setSelectedFile(null);
+      setInputMethod(null);
+    } finally {
+      setIsProcessingFile(false);
     }
   };
 
   const handleUrlInput = () => {
-    setInputMethod(InputMethod.URL);
+    handleMethodSelect(InputMethod.URL);
+    Alert.alert('Coming Soon', 'URL processing is not yet implemented.');
   };
 
   const handleNext = async () => {
-    if (isAuthLoading) {
-      Alert.alert('Authenticating', 'Please wait, checking your session.');
+    if (isAuthLoading || !authSession?.user?.id) {
+      Alert.alert('Authentication Error', 'Please wait or sign in.');
       return;
     }
-
-    if (!authSession?.user?.id) {
-      Alert.alert(
-        'Authentication Error',
-        'User not authenticated. Please sign in again.'
-      );
+    if (!title.trim()) {
+      Alert.alert('Input Error', 'Please enter a title for your audiobook.');
       return;
     }
+    let contentToProcess = '';
+    if (inputMethod === InputMethod.TEXT) contentToProcess = text;
+    if (inputMethod === InputMethod.FILE) contentToProcess = text;
+    if (inputMethod === InputMethod.URL) contentToProcess = url;
 
-    if (!inputMethod) {
+    if (!contentToProcess.trim()) {
       Alert.alert(
-        'Input Required',
-        'Please select an input method (Text, File, or URL).'
+        'Input Error',
+        `Please provide content for the audiobook via ${inputMethod}.`
       );
       return;
     }
 
     try {
-      if (inputMethod === InputMethod.TEXT && !text.trim()) {
-        Alert.alert('Input Error', 'Please enter some text for the audiobook.');
-        return;
-      }
-      if (inputMethod === InputMethod.URL && !url.trim()) {
-        Alert.alert('Input Error', 'Please enter a valid URL.');
-        return;
-      }
-      if (inputMethod === InputMethod.FILE && !text.trim()) {
-        Alert.alert(
-          'File Error',
-          'The selected file appears to be empty or could not be read.'
-        );
-        return;
-      }
-      if (!title.trim()) {
-        Alert.alert('Input Error', 'Please enter a title for your audiobook.');
-        return;
-      }
-
       const audiobook = await create({
         title,
         textContent: JSON.stringify({
-          originalText: text,
+          originalText: contentToProcess,
           backgroundEffect: null,
         }),
       });
 
       if (!audiobook) {
-        Alert.alert(
-          'Creation Failed',
-          createError || 'Failed to create audiobook. Please try again later.'
-        );
-        return;
+        throw new Error(createError || 'Failed to create audiobook.');
       }
 
       router.push({
@@ -151,71 +154,11 @@ export default function CreateScreen() {
         params: {
           id: audiobook.id,
           title: encodeURIComponent(title),
-          text: encodeURIComponent(text),
+          text: encodeURIComponent(contentToProcess),
         },
       });
     } catch (error: any) {
-      console.error('Create audiobook error in handleNext:', error);
       Alert.alert('Error', error.message || 'An unexpected error occurred.');
-    }
-  };
-
-  const renderInputMethod = () => {
-    switch (inputMethod) {
-      case InputMethod.TEXT:
-        return (
-          <View style={styles.inputContainer}>
-            <Input
-              label="Text to convert"
-              placeholder="Enter or paste your text here..."
-              value={text}
-              onChangeText={setText}
-              multiline
-              numberOfLines={8}
-              textAlignVertical="top"
-              inputStyle={{ minHeight: 120 }}
-            />
-          </View>
-        );
-
-      case InputMethod.FILE:
-        return (
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Selected File</Text>
-            <View style={styles.fileContainer}>
-              <Text
-                style={styles.fileName}
-                numberOfLines={1}
-                ellipsizeMode="middle"
-              >
-                {selectedFile || 'No file selected'}
-              </Text>
-              <Button
-                title="Change File"
-                size="sm"
-                variant="outline"
-                onPress={handleFileInput}
-              />
-            </View>
-          </View>
-        );
-
-      case InputMethod.URL:
-        return (
-          <View style={styles.inputContainer}>
-            <Input
-              label="URL to extract text from"
-              placeholder="https://example.com/article"
-              value={url}
-              onChangeText={setUrl}
-              keyboardType="url"
-              leftIcon={<LinkIcon size={18} color={Colors.gray[400]} />}
-            />
-          </View>
-        );
-
-      default:
-        return null;
     }
   };
 
@@ -236,67 +179,85 @@ export default function CreateScreen() {
       keyboardShouldPersistTaps="handled"
     >
       <View style={styles.header}>
-        <Text style={styles.title}>Create New Audiobook</Text>
-        <Text style={styles.subtitle}>Choose a method to input your text</Text>
+        <View style={styles.aiBadge}>
+          <Bot size={14} color={Colors.gray[600]} />
+          <Text style={styles.aiBadgeText}>Powered by AI</Text>
+        </View>
+        <Text style={styles.title}>AI Audiobook Studio</Text>
+        <Text style={styles.subtitle}>
+          Transform any content into lifelike speech
+        </Text>
       </View>
 
       <View style={styles.methodsContainer}>
-        <Card
-          style={StyleSheet.flatten([
-            styles.methodCard,
-            inputMethod === InputMethod.TEXT && styles.selectedMethodCard,
-          ])}
-          onPress={handleTextInput}
-        >
-          <View style={styles.methodIcon}>
-            <TextIcon size={24} color={Colors.black} />
-          </View>
-          <Text style={styles.methodTitle}>Enter Text</Text>
-          <Text style={styles.methodDesc}>Type or paste text directly</Text>
-        </Card>
-
-        <Card
-          style={StyleSheet.flatten([
-            styles.methodCard,
-            inputMethod === InputMethod.FILE && styles.selectedMethodCard,
-          ])}
+        <MethodButton
+          icon={<TextIcon size={24} color={Colors.black} />}
+          title="Text Input"
+          description="Type or paste your text directly"
+          tag="Instant"
+          onPress={() => handleMethodSelect(InputMethod.TEXT)}
+          isSelected={inputMethod === InputMethod.TEXT}
+        />
+        <MethodButton
+          icon={<FileUp size={24} color={Colors.black} />}
+          title="Upload File"
+          description="DOCX, PDF, or TXT files"
+          tag="Smart"
           onPress={handleFileInput}
-        >
-          <View style={styles.methodIcon}>
-            <FileUp size={24} color={Colors.black} />
-          </View>
-          <Text style={styles.methodTitle}>Upload File</Text>
-          <Text style={styles.methodDesc}>PDF, DOCX, or TXT files</Text>
-        </Card>
-
-        <Card
-          style={StyleSheet.flatten([
-            styles.methodCard,
-            inputMethod === InputMethod.URL && styles.selectedMethodCard,
-          ])}
+          isSelected={inputMethod === InputMethod.FILE}
+          isLoading={isProcessingFile}
+        />
+        <MethodButton
+          icon={<LinkIcon size={24} color={Colors.black} />}
+          title="From URL"
+          description="Extract content from any webpage"
+          tag="Auto"
           onPress={handleUrlInput}
-        >
-          <View style={styles.methodIcon}>
-            <LinkIcon size={24} color={Colors.black} />
-          </View>
-          <Text style={styles.methodTitle}>From URL</Text>
-          <Text style={styles.methodDesc}>Extract text from a website</Text>
-        </Card>
+          isSelected={inputMethod === InputMethod.URL}
+        />
       </View>
 
       {inputMethod && (
-        <>
-          {renderInputMethod()}
-
-          <View style={styles.titleContainer}>
+        <View style={styles.inputSection}>
+          {inputMethod === InputMethod.TEXT && (
             <Input
-              label="Audiobook Title"
-              placeholder="Enter a title for your audiobook"
-              value={title}
-              onChangeText={setTitle}
+              label="Text to convert"
+              placeholder="Enter or paste your text here..."
+              value={text}
+              onChangeText={setText}
+              multiline
+              numberOfLines={6}
+              textAlignVertical="top"
+              inputStyle={styles.textArea}
+              labelStyle={styles.inputLabel}
             />
-          </View>
-
+          )}
+          {inputMethod === InputMethod.FILE && selectedFile && (
+            <View style={styles.fileInfo}>
+              <Text style={styles.inputLabel}>Selected File</Text>
+              <Text style={styles.fileName} numberOfLines={1}>
+                {selectedFile}
+              </Text>
+            </View>
+          )}
+          {inputMethod === InputMethod.URL && (
+            <Input
+              label="Article URL"
+              placeholder="https://example.com/article"
+              value={url}
+              onChangeText={setUrl}
+              keyboardType="url"
+              labelStyle={styles.inputLabel}
+            />
+          )}
+          <Input
+            label="Audiobook Title"
+            placeholder="Enter a title for your audiobook"
+            value={title}
+            onChangeText={setTitle}
+            labelStyle={styles.inputLabel}
+            containerStyle={{ marginTop: Layout.spacing.md }}
+          />
           <Button
             title="Next: Choose Voice"
             onPress={handleNext}
@@ -305,7 +266,7 @@ export default function CreateScreen() {
             icon={<Mic size={18} color={Colors.white} />}
             loading={isCreating}
           />
-        </>
+        </View>
       )}
 
       <View style={styles.tipContainer}>
@@ -320,6 +281,46 @@ export default function CreateScreen() {
   );
 }
 
+const MethodButton = ({
+  icon,
+  title,
+  description,
+  tag,
+  onPress,
+  isSelected,
+  isLoading,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  tag: string;
+  onPress: () => void;
+  isSelected: boolean;
+  isLoading?: boolean;
+}) => (
+  <Pressable
+    onPress={onPress}
+    style={[styles.methodButton, isSelected && styles.selectedMethodButton]}
+    disabled={isLoading}
+  >
+    <View style={styles.methodIcon}>{icon}</View>
+    <View style={styles.methodTextContainer}>
+      <View style={styles.methodTitleContainer}>
+        <Text style={styles.methodTitle}>{title}</Text>
+        <View style={styles.tag}>
+          <Text style={styles.tagText}>{tag}</Text>
+        </View>
+      </View>
+      <Text style={styles.methodDesc}>{description}</Text>
+    </View>
+    {isLoading ? (
+      <ActivityIndicator color={Colors.black} />
+    ) : (
+      <ChevronRight size={20} color={Colors.gray[400]} />
+    )}
+  </Pressable>
+);
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -330,8 +331,10 @@ const styles = StyleSheet.create({
     paddingBottom: Layout.spacing.xl * 2,
   },
   centerContent: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: Colors.softCream,
   },
   loadingText: {
     marginTop: Layout.spacing.sm,
@@ -339,83 +342,137 @@ const styles = StyleSheet.create({
     color: Colors.gray[600],
   },
   header: {
-    marginBottom: Layout.spacing.lg,
+    alignItems: 'center',
+    marginBottom: Layout.spacing.xl,
+    paddingTop: Layout.spacing.lg,
+  },
+  aiBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: Colors.white,
+    marginBottom: Layout.spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.gray[200],
+  },
+  aiBadgeText: {
+    color: Colors.gray[600],
+    fontSize: 12,
+    marginLeft: 6,
+    fontWeight: '500',
   },
   title: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: 'bold',
     color: Colors.black,
+    textAlign: 'center',
     marginBottom: Layout.spacing.xs,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 18,
     color: Colors.gray[600],
+    textAlign: 'center',
   },
   methodsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     marginBottom: Layout.spacing.lg,
   },
-  methodCard: {
-    flex: 1,
-    marginHorizontal: Layout.spacing.xs,
-    padding: Layout.spacing.md,
-    alignItems: 'center',
-  },
-  selectedMethodCard: {
-    borderColor: Colors.black,
-    borderWidth: 2,
-  },
-  methodIcon: {
-    marginBottom: Layout.spacing.sm,
-  },
-  methodTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.black,
-    marginBottom: Layout.spacing.xs,
-    textAlign: 'center',
-  },
-  methodDesc: {
-    fontSize: 12,
-    color: Colors.gray[500],
-    textAlign: 'center',
-  },
-  inputContainer: {
-    marginBottom: Layout.spacing.lg,
-  },
-  inputLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.gray[700],
-    marginBottom: Layout.spacing.xs,
-  },
-  fileContainer: {
+  methodButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     backgroundColor: Colors.white,
     padding: Layout.spacing.md,
+    borderRadius: Layout.borderRadius.lg,
+    marginBottom: Layout.spacing.md,
+    borderWidth: 1.5,
+    borderColor: Colors.gray[200],
+    shadowColor: Colors.gray[400],
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  selectedMethodButton: {
+    borderColor: Colors.orange,
+    backgroundColor: Colors.lightPeach,
+  },
+  methodIcon: {
+    width: 40,
+    height: 40,
     borderRadius: Layout.borderRadius.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.softCream,
+    marginRight: Layout.spacing.md,
+  },
+  methodTextContainer: {
+    flex: 1,
+  },
+  methodTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  methodTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.black,
+  },
+  tag: {
+    marginLeft: Layout.spacing.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: Colors.orange,
+  },
+  tagText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: Colors.white,
+  },
+  methodDesc: {
+    fontSize: 14,
+    color: Colors.gray[600],
+  },
+  inputSection: {
+    backgroundColor: Colors.white,
+    padding: Layout.spacing.md,
+    borderRadius: Layout.borderRadius.lg,
+    marginBottom: Layout.spacing.lg,
     borderWidth: 1,
+    borderColor: Colors.gray[200],
+  },
+  inputLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.gray[800],
+    marginBottom: Layout.spacing.sm,
+  },
+  textArea: {
+    minHeight: 120,
+    backgroundColor: Colors.gray[100],
     borderColor: Colors.gray[300],
+    color: Colors.black,
+  },
+  fileInfo: {
+    marginBottom: Layout.spacing.md,
   },
   fileName: {
-    flex: 1,
-    fontSize: 16,
     color: Colors.black,
-    marginRight: Layout.spacing.sm,
-  },
-  titleContainer: {
-    marginBottom: Layout.spacing.lg,
+    fontSize: 16,
+    backgroundColor: Colors.gray[100],
+    padding: Layout.spacing.md,
+    borderRadius: Layout.borderRadius.md,
+    overflow: 'hidden',
   },
   nextButton: {
-    marginTop: Layout.spacing.md,
+    marginTop: Layout.spacing.lg,
+    backgroundColor: Colors.orange,
   },
   tipContainer: {
-    marginTop: Layout.spacing.xl,
+    marginTop: Layout.spacing.lg,
     padding: Layout.spacing.md,
-    backgroundColor: Colors.gray[100],
+    backgroundColor: Colors.lightPeach,
     borderRadius: Layout.borderRadius.md,
   },
   tipTitle: {

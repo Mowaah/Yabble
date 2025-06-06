@@ -86,3 +86,91 @@ export const prepareAudioFile = async (
     }
   }
 };
+
+/**
+ * Checks if a file is a DOCX file
+ * @param mimeType The MIME type of the file
+ * @param fileName The name of the file
+ * @returns boolean
+ */
+export const isDOCXFile = (mimeType?: string, fileName?: string): boolean => {
+  const docxMimeTypes = [
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/msword',
+  ];
+
+  if (mimeType && docxMimeTypes.includes(mimeType)) {
+    return true;
+  }
+
+  if (
+    fileName &&
+    (fileName.toLowerCase().endsWith('.docx') ||
+      fileName.toLowerCase().endsWith('.doc'))
+  ) {
+    return true;
+  }
+
+  return false;
+};
+
+/**
+ * Checks if a file is a PDF file
+ * @param mimeType The MIME type of the file
+ * @param fileName The name of the file
+ * @returns boolean
+ */
+export const isPDFFile = (mimeType?: string, fileName?: string): boolean => {
+  if (mimeType === 'application/pdf') {
+    return true;
+  }
+
+  if (fileName && fileName.toLowerCase().endsWith('.pdf')) {
+    return true;
+  }
+
+  return false;
+};
+
+/**
+ * Checks if a file is a plain text file
+ * @param mimeType The MIME type of the file
+ * @param fileName The name of the file
+ * @returns boolean
+ */
+export const isTextFile = (mimeType?: string, fileName?: string): boolean => {
+  if (mimeType === 'text/plain') {
+    return true;
+  }
+
+  if (fileName && fileName.toLowerCase().endsWith('.txt')) {
+    return true;
+  }
+
+  return false;
+};
+
+/**
+ * Gets a user-friendly file type description
+ * @param mimeType The MIME type of the file
+ * @param fileName The name of the file
+ * @returns string
+ */
+export const getFileTypeDescription = (
+  mimeType?: string,
+  fileName?: string
+): string => {
+  if (isDOCXFile(mimeType, fileName)) {
+    return 'Word Document';
+  }
+
+  if (isPDFFile(mimeType, fileName)) {
+    return 'PDF Document';
+  }
+
+  if (isTextFile(mimeType, fileName)) {
+    return 'Text File';
+  }
+
+  return 'Document';
+};
