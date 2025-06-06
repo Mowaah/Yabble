@@ -5,7 +5,6 @@ import {
   View,
   ScrollView,
   Pressable,
-  FlatList,
   TouchableWithoutFeedback,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -22,8 +21,10 @@ import Colors from '../constants/Colors';
 import Layout from '../constants/Layout';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
+import BackgroundSelector, {
+  BackgroundSelectorRef,
+} from '../components/audiobook/BackgroundSelector';
 import { mockAudioEffects } from '../utils/mockData';
-import { AudioEffect } from '../types';
 import { audioEffects } from '../lib/audio';
 import { updateAudiobook } from '../lib/database';
 
@@ -33,7 +34,6 @@ export default function AudioScreen() {
   const [selectedEffect, setSelectedEffect] = useState<string | null>(
     (backgroundEffect as string) || null
   );
-  const [playingEffect, setPlayingEffect] = useState<string | null>(null);
   const [volume, setVolume] = useState(() => {
     const initialVolume = audioEffects.getVolume();
     return isFinite(initialVolume) && !isNaN(initialVolume)
@@ -51,49 +51,13 @@ export default function AudioScreen() {
   const [backgroundSliderWidth, setBackgroundSliderWidth] = useState(0);
   const volumeTrackRef = useRef<View>(null);
   const backgroundVolumeTrackRef = useRef<View>(null);
-
-  const effectCategories = [
-    { id: 'music', title: 'Background Music' },
-    { id: 'ambient', title: 'Ambient Sounds' },
-    { id: 'sound_effect', title: 'Sound Effects' },
-  ];
-
-  const getEffectsByCategory = (category: string) => {
-    return mockAudioEffects.filter((effect) => effect.category === category);
-  };
+  const backgroundSelectorRef = useRef<BackgroundSelectorRef>(null);
 
   const handleSelectEffect = (effectId: string) => {
     if (selectedEffect === effectId) {
       setSelectedEffect(null);
     } else {
       setSelectedEffect(effectId);
-    }
-  };
-
-  const handlePlayEffect = async (effectId: string) => {
-    try {
-      const effect = mockAudioEffects.find((e) => e.id === effectId);
-      if (!effect) return;
-
-      if (isPlaying && playingEffect === effectId) {
-        // Stop if currently playing this specific effect
-        await audioEffects.stopBackgroundMusic();
-        setIsPlaying(false);
-        setPlayingEffect(null);
-      } else {
-        // Stop any currently playing effect and play the new one
-        if (isPlaying) {
-          await audioEffects.stopBackgroundMusic();
-        }
-
-        // Play the clicked effect
-        await audioEffects.loadBackgroundMusic(effect.previewUrl);
-        await audioEffects.playBackgroundMusic();
-        setIsPlaying(true);
-        setPlayingEffect(effectId);
-      }
-    } catch (error) {
-      console.error('Error handling effect playback:', error);
     }
   };
 
@@ -170,6 +134,9 @@ export default function AudioScreen() {
 
   const handleNext = async () => {
     try {
+      // Stop any playing preview before moving to export
+      await backgroundSelectorRef.current?.stopPreview();
+
       if (selectedEffect && id) {
         // Update audiobook with selected background effect
         const originalText = (() => {
@@ -208,41 +175,6 @@ export default function AudioScreen() {
     };
   }, []);
 
-  const renderEffectItem = ({ item }: { item: AudioEffect }) => (
-    <Card
-      style={StyleSheet.flatten([
-        styles.effectCard,
-        selectedEffect === item.id && styles.selectedEffectCard,
-      ])}
-      onPress={() => handleSelectEffect(item.id)}
-    >
-      <View style={styles.effectHeader}>
-        <Text style={styles.effectName}>{item.name}</Text>
-        <Pressable
-          style={StyleSheet.flatten([
-            styles.playButton,
-            isPlaying && playingEffect === item.id && styles.playingButton,
-          ])}
-          onPress={(e) => {
-            e.stopPropagation();
-            handlePlayEffect(item.id);
-          }}
-        >
-          <Play size={14} color={Colors.white} />
-        </Pressable>
-      </View>
-
-      <View style={styles.waveformContainer}>
-        <View
-          style={StyleSheet.flatten([
-            styles.waveform,
-            isPlaying && playingEffect === item.id && styles.activeWaveform,
-          ])}
-        />
-      </View>
-    </Card>
-  );
-
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: Colors.softCream }}>
       <View style={styles.container}>
@@ -270,26 +202,12 @@ export default function AudioScreen() {
             </Text>
           </View>
 
-          {effectCategories.map((category) => {
-            const categoryEffects = getEffectsByCategory(category.id);
-
-            if (categoryEffects.length === 0) return null;
-
-            return (
-              <View key={category.id} style={styles.section}>
-                <Text style={styles.categoryTitle}>{category.title}</Text>
-
-                <FlatList
-                  data={categoryEffects}
-                  renderItem={renderEffectItem}
-                  keyExtractor={(item) => item.id}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.effectsListContent}
-                />
-              </View>
-            );
-          })}
+          <BackgroundSelector
+            ref={backgroundSelectorRef}
+            effects={mockAudioEffects}
+            selectedEffectId={selectedEffect}
+            onSelectEffect={handleSelectEffect}
+          />
 
           <View style={styles.volumeSection}>
             <Text style={styles.volumeTitle}>Voice Volume</Text>

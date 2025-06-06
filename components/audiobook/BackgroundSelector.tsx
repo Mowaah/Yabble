@@ -1,4 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, {
+  useState,
+  useEffect,
+  forwardRef,
+  useImperativeHandle,
+} from 'react';
 import { StyleSheet, Text, View, FlatList, Pressable } from 'react-native';
 import { Play, Pause } from 'lucide-react-native';
 import Colors from '../../constants/Colors';
@@ -15,12 +20,14 @@ interface BackgroundSelectorProps {
   onPreviewEffect?: (effectId: string) => void;
 }
 
-export default function BackgroundSelector({
-  effects,
-  selectedEffectId,
-  onSelectEffect,
-  onPreviewEffect,
-}: BackgroundSelectorProps) {
+export interface BackgroundSelectorRef {
+  stopPreview: () => Promise<void>;
+}
+
+const BackgroundSelector = forwardRef<
+  BackgroundSelectorRef,
+  BackgroundSelectorProps
+>(({ effects, selectedEffectId, onSelectEffect, onPreviewEffect }, ref) => {
   const [playingEffectId, setPlayingEffectId] = useState<string | null>(null);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlayButtonPressed, setIsPlayButtonPressed] = useState(false);
@@ -88,6 +95,11 @@ export default function BackgroundSelector({
     }
   };
 
+  // Expose stopPreview method to parent components
+  useImperativeHandle(ref, () => ({
+    stopPreview: stopCurrentSound,
+  }));
+
   // Cleanup sound on unmount
   useEffect(() => {
     return () => {
@@ -105,8 +117,10 @@ export default function BackgroundSelector({
           styles.effectCard,
           isSelected && styles.selectedEffectCard,
         ])}
-        onPress={() => {
+        onPress={async () => {
           if (!isPlayButtonPressed) {
+            // Stop any playing preview before selecting the effect
+            await stopCurrentSound();
             onSelectEffect(item.id);
           }
         }}
@@ -173,7 +187,11 @@ export default function BackgroundSelector({
       })}
     </View>
   );
-}
+});
+
+BackgroundSelector.displayName = 'BackgroundSelector';
+
+export default BackgroundSelector;
 
 const styles = StyleSheet.create({
   container: {

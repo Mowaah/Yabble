@@ -101,9 +101,10 @@ export default function Player({
             setIsPlaying(false);
             setProgress(0);
             setCurrentTime(0);
-          } else if (isPlaying) {
-            setTimeout(checkStatus, 500); // Check every 500ms
+            return; // Stop monitoring when audio ends
           }
+          // Continue monitoring while audio is playing
+          setTimeout(checkStatus, 500); // Check every 500ms
         };
 
         setTimeout(checkStatus, 1000); // Start checking after 1 second
