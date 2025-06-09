@@ -307,7 +307,7 @@ export default function AudioScreen() {
           showsVerticalScrollIndicator={false}
         >
           {/* Step 1: Choose Background Audio */}
-          <Card style={styles.stepCard}>
+          <View style={styles.stepCard}>
             <View style={styles.stepHeader}>
               <View style={styles.stepNumber}>
                 <Text style={styles.stepNumberText}>1</Text>
@@ -490,7 +490,7 @@ export default function AudioScreen() {
                 </View>
               );
             })}
-          </Card>
+          </View>
 
           {/* Step 2: Adjust Audio Levels */}
           <Card style={styles.volumeCard}>
@@ -702,10 +702,6 @@ const styles = StyleSheet.create({
 
   stepCard: {
     marginBottom: Layout.spacing.lg,
-    backgroundColor: 'transparent',
-    borderWidth: 0,
-    shadowOpacity: 0,
-    elevation: 0,
   },
   volumeCard: {
     marginBottom: Layout.spacing.lg,
