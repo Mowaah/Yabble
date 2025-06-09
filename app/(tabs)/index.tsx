@@ -1,6 +1,14 @@
 import React from 'react';
-import { StyleSheet, Text, View, ScrollView, Image, Pressable } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+  ScrollView,
+  Image,
+  Pressable,
+} from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Plus, ChevronRight } from 'lucide-react-native';
 import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
@@ -12,18 +20,21 @@ import { mockAudiobooks } from '../../utils/mockData';
 export default function HomeScreen() {
   const router = useRouter();
   const recentBooks = mockAudiobooks.slice(0, 2);
-  
+  const insets = useSafeAreaInsets();
+
   return (
-    <ScrollView 
-      style={styles.container} 
+    <ScrollView
+      style={[styles.container, { paddingTop: insets.top }]}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.header}>
-        <Text style={styles.appName}>StoryVoice</Text>
-        <Text style={styles.welcomeText}>Transform your text into beautiful audiobooks</Text>
+        <Text style={styles.appName}>Yabble</Text>
+        <Text style={styles.welcomeText}>
+          Transform your text into beautiful audiobooks
+        </Text>
       </View>
-      
+
       <Card style={styles.createCard} onPress={() => router.push('/create')}>
         <View style={styles.createCardContent}>
           <View style={styles.createTextContainer}>
@@ -32,7 +43,7 @@ export default function HomeScreen() {
               Turn any text into a professional audiobook in minutes
             </Text>
           </View>
-          
+
           <View style={styles.createButtonContainer}>
             <View style={styles.createButton}>
               <Plus size={24} color={Colors.white} />
@@ -40,47 +51,49 @@ export default function HomeScreen() {
           </View>
         </View>
       </Card>
-      
+
       {recentBooks.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Recent Audiobooks</Text>
-            <Pressable 
-              style={styles.seeAllButton} 
+            <Pressable
+              style={styles.seeAllButton}
               onPress={() => router.push('/library')}
             >
               <Text style={styles.seeAllText}>See All</Text>
               <ChevronRight size={16} color={Colors.black} />
             </Pressable>
           </View>
-          
-          {recentBooks.map(book => (
+
+          {recentBooks.map((book) => (
             <AudiobookCard key={book.id} book={book} />
           ))}
         </View>
       )}
-      
+
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Featured Voices</Text>
-        <ScrollView 
-          horizontal 
+        <ScrollView
+          horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.voicesScrollContent}
         >
-          {[1, 2, 3, 4].map(i => (
+          {[1, 2, 3, 4].map((i) => (
             <Card key={i} style={styles.voiceCard}>
-              <Image 
-                source={{ uri: `https://images.pexels.com/photos/12${i}680/pexels-photo-12${i}680.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2` }} 
-                style={styles.voiceImage} 
+              <Image
+                source={{
+                  uri: `https://images.pexels.com/photos/12${i}680/pexels-photo-12${i}680.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2`,
+                }}
+                style={styles.voiceImage}
               />
               <View style={styles.voiceInfo}>
                 <Text style={styles.voiceName}>Voice {i}</Text>
                 <Text style={styles.voiceDesc}>Professional Narrator</Text>
               </View>
-              <Button 
-                title="Try" 
-                size="sm" 
-                variant="outline" 
+              <Button
+                title="Try"
+                size="sm"
+                variant="outline"
                 onPress={() => {}}
                 style={styles.tryButton}
               />
@@ -88,22 +101,24 @@ export default function HomeScreen() {
           ))}
         </ScrollView>
       </View>
-      
+
       <Card style={styles.tipCard}>
         <Text style={styles.tipTitle}>Pro Tip</Text>
         <Text style={styles.tipText}>
-          For best results, break dialogue with quotation marks and use punctuation to create natural pauses.
+          For best results, break dialogue with quotation marks and use
+          punctuation to create natural pauses.
         </Text>
       </Card>
-      
+
       <View style={styles.premiumSection}>
         <Text style={styles.premiumTitle}>Upgrade to Premium</Text>
         <Text style={styles.premiumDesc}>
-          Get access to all premium voices, unlimited exports, and advanced editing features.
+          Get access to all premium voices, unlimited exports, and advanced
+          editing features.
         </Text>
-        <Button 
-          title="Explore Premium" 
-          variant="secondary" 
+        <Button
+          title="Explore Premium"
+          variant="secondary"
           onPress={() => {}}
           style={styles.premiumButton}
         />

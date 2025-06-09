@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -6,11 +6,13 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
+  SafeAreaView,
+  TouchableOpacity,
   Keyboard,
-  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Mail, ArrowLeft } from 'lucide-react-native';
+import { Mail, ArrowLeft, Send } from 'lucide-react-native';
 import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
 import Button from '../../components/ui/Button';
@@ -25,46 +27,34 @@ export default function ForgotPasswordScreen() {
   const [emailError, setEmailError] = useState('');
   const [success, setSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isLogoVisible, setIsLogoVisible] = useState(true);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener(
-      'keyboardDidShow',
-      () => {
-        setIsLogoVisible(false);
-      }
-    );
-    const keyboardDidHideListener = Keyboard.addListener(
-      'keyboardDidHide',
-      () => {
-        setIsLogoVisible(true);
-      }
-    );
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 500,
-      useNativeDriver: true,
-    }).start();
-    return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
-    };
-  }, [fadeAnim]);
+  // Dismiss keyboard when tapping outside
+  const dismissKeyboard = () => {
+    Keyboard.dismiss();
+  };
 
   const handleResetPassword = async () => {
+    // Dismiss keyboard first
+    Keyboard.dismiss();
+
     setError('');
     setEmailError('');
     setSuccess(false);
 
-    if (!email) {
+    let isValid = true;
+    if (!email.trim()) {
       setEmailError('Email is required');
-      return;
+      isValid = false;
+    } else if (!/\S+@\S+\.\S+/.test(email)) {
+      setEmailError('Please enter a valid email');
+      isValid = false;
     }
+
+    if (!isValid) return;
 
     setIsLoading(true);
     try {
-      const { error: resetError } = await resetPassword(email);
+      const { error: resetError } = await resetPassword(email.trim());
       if (resetError) throw resetError;
       setSuccess(true);
     } catch (err: any) {
@@ -75,116 +65,213 @@ export default function ForgotPasswordScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.keyboardAvoidingContainer}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <Animated.View style={[{ opacity: fadeAnim }, styles.innerContainer]}>
-        <View style={styles.header}>
-          {isLogoVisible && (
-            <Logo width={150} height={150} style={styles.logo} />
-          )}
-          <Text style={styles.title}>Reset Password</Text>
-          <Text style={styles.subtitle}>
-            Enter your email address and we'll send you instructions to reset
-            your password
-          </Text>
-        </View>
+    <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <TouchableOpacity
+            style={styles.touchableContainer}
+            activeOpacity={1}
+            onPress={dismissKeyboard}
+          >
+            {/* Header */}
+            <View style={styles.header}>
+              <View style={styles.logoContainer}>
+                <Logo width={100} height={100} style={styles.logoImage} />
+              </View>
+              <Text style={styles.title}>Reset Password</Text>
+              <Text style={styles.subtitle}>
+                Enter your email address and we'll send you instructions to
+                reset your password
+              </Text>
+            </View>
 
-        <View style={styles.form}>
-          <Input
-            label="Email"
-            placeholder="Enter your email"
-            value={email}
-            onChangeText={(text) => {
-              setEmail(text);
-              if (emailError) setEmailError('');
-              if (error) setError('');
-              if (success) setSuccess(false);
-            }}
-            error={emailError}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            leftIcon={<Mail size={20} color={Colors.orange} />}
-            type="email"
-          />
+            {/* Form */}
+            <View style={styles.formSection}>
+              <Input
+                label="Email"
+                placeholder="Enter your email"
+                value={email}
+                onChangeText={(text) => {
+                  setEmail(text);
+                  if (emailError) setEmailError('');
+                  if (error) setError('');
+                  if (success) setSuccess(false);
+                }}
+                error={emailError}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                leftIcon={<Mail size={20} color={Colors.primary} />}
+                type="email"
+                containerStyle={styles.inputContainer}
+                returnKeyType="done"
+                onSubmitEditing={handleResetPassword}
+                autoComplete="email"
+                textContentType="emailAddress"
+              />
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-          {success ? (
-            <Text style={styles.success}>
-              Password reset instructions have been sent to your email
-            </Text>
-          ) : null}
+              {error ? (
+                <View style={styles.errorContainer}>
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              ) : null}
 
-          <Button
-            title="Send Reset Link"
-            onPress={handleResetPassword}
-            disabled={isLoading}
-            icon={isLoading && <ActivityIndicator color={Colors.white} />}
-            style={styles.resetButton}
-          />
+              {success ? (
+                <View style={styles.successContainer}>
+                  <Text style={styles.successText}>
+                    Password reset instructions have been sent to your email
+                  </Text>
+                </View>
+              ) : null}
 
-          <Button
-            title="Back to Sign In"
-            variant="ghost"
-            onPress={() => router.push('/sign-in')}
-            icon={<ArrowLeft size={20} color={Colors.black} />}
-            style={styles.backButton}
-          />
-        </View>
-      </Animated.View>
-    </KeyboardAvoidingView>
+              <Button
+                title={isLoading ? 'Sending...' : 'Send Reset Link'}
+                onPress={handleResetPassword}
+                disabled={isLoading || !email.trim()}
+                icon={
+                  isLoading ? (
+                    <ActivityIndicator color="white" size="small" />
+                  ) : (
+                    <Send size={20} color="white" />
+                  )
+                }
+                style={styles.resetButton}
+              />
+
+              {/* Links */}
+              <View style={styles.linksContainer}>
+                <TouchableOpacity
+                  style={styles.linkButton}
+                  onPress={() => router.replace('/sign-in')}
+                >
+                  <ArrowLeft size={16} color={Colors.primary} />
+                  <Text style={styles.linkText}>Back to Sign In</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  keyboardAvoidingContainer: {
+  safeArea: {
     flex: 1,
-    backgroundColor: Colors.softCream,
+    backgroundColor: Colors.softBackground,
   },
-  innerContainer: {
+  container: {
+    flex: 1,
+  },
+  scrollContainer: {
     flexGrow: 1,
-    justifyContent: 'flex-start',
-    padding: Layout.spacing.lg,
+    justifyContent: 'center',
+    paddingHorizontal: Layout.spacing.lg,
+    paddingVertical: Layout.spacing.xl,
   },
   header: {
     alignItems: 'center',
-    marginVertical: Layout.spacing.xl,
+    marginBottom: Layout.spacing.xl,
   },
-  logo: {
-    width: 150,
-    height: 150,
-    marginBottom: Layout.spacing.md,
+  logoContainer: {
+    marginBottom: Layout.spacing.lg,
+  },
+  logoImage: {
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   title: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: Colors.black,
+    fontSize: 28,
+    fontWeight: '700',
+    color: Colors.primary,
     marginBottom: Layout.spacing.xs,
+    textAlign: 'center',
+    letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 16,
-    color: Colors.gray[700],
+    color: Colors.gray[500],
     textAlign: 'center',
-    marginHorizontal: Layout.spacing.lg,
+    fontWeight: '400',
+    lineHeight: 24,
+    paddingHorizontal: Layout.spacing.md,
   },
-  form: {
-    marginTop: Layout.spacing.xl,
+  formSection: {
+    paddingHorizontal: Layout.spacing.sm,
   },
-  error: {
+  inputContainer: {
+    marginBottom: Layout.spacing.md,
+  },
+  errorContainer: {
+    backgroundColor: '#fef2f2',
+    borderRadius: 8,
+    padding: Layout.spacing.sm,
+    marginBottom: Layout.spacing.md,
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.error,
+  },
+  errorText: {
     color: Colors.error,
-    marginBottom: Layout.spacing.md,
     textAlign: 'center',
+    fontSize: 14,
+    fontWeight: '500',
   },
-  success: {
-    color: Colors.success,
+  successContainer: {
+    backgroundColor: '#f0fdf4',
+    borderRadius: 8,
+    padding: Layout.spacing.sm,
     marginBottom: Layout.spacing.md,
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.success,
+  },
+  successText: {
+    color: Colors.success,
     textAlign: 'center',
+    fontSize: 14,
+    fontWeight: '500',
+    lineHeight: 20,
   },
   resetButton: {
-    marginTop: Layout.spacing.md,
+    marginTop: Layout.spacing.lg,
+    marginBottom: Layout.spacing.lg,
+    backgroundColor: Colors.primary,
+    borderRadius: 16,
+    minHeight: 56,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  backButton: {
-    marginTop: Layout.spacing.md,
+  linksContainer: {
+    alignItems: 'center',
+    paddingTop: Layout.spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: Colors.gray[200],
+  },
+  linkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Layout.spacing.sm,
+    paddingHorizontal: Layout.spacing.xs,
+  },
+  linkText: {
+    color: Colors.primary,
+    fontSize: 15,
+    fontWeight: '600',
+    marginLeft: Layout.spacing.xs,
+  },
+  touchableContainer: {
+    flex: 1,
   },
 });

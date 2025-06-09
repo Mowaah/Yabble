@@ -159,16 +159,7 @@ const styles = StyleSheet.create({
   },
   inputFocused: {
     borderWidth: 2,
-    borderColor: '#ed9c01',
-    backgroundColor: '#ffffff',
-    shadowColor: '#ed9c01',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
+    borderColor: Colors.primary,
   },
   inputError: {
     borderWidth: 2,

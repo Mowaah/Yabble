@@ -5,7 +5,9 @@ import type { Tables } from '../lib/database';
 
 export function useProfile() {
   const { session } = useAuth();
-  const [profile, setProfile] = useState<Tables['profiles']['Row'] | null>(null);
+  const [profile, setProfile] = useState<Tables['profiles']['Row'] | null>(
+    null
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,7 +29,9 @@ export function useProfile() {
     loadProfile();
   }, [session?.user.id]);
 
-  const updateProfile = async (updates: Partial<Tables['profiles']['Update']>) => {
+  const updateProfile = async (
+    updates: Partial<Tables['profiles']['Update']>
+  ) => {
     if (!session?.user.id) return;
 
     try {

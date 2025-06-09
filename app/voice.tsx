@@ -6,13 +6,18 @@ import {
   ScrollView,
   Pressable,
   Alert,
+  Animated,
+  Dimensions,
+  Vibration,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
   ChevronLeft,
-  ChevronRight,
-  Volume2,
+  Mic,
+  Sparkles,
   Settings,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react-native';
 import Slider from '@react-native-community/slider';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -32,13 +37,24 @@ export default function VoiceScreen() {
   const { session } = useAuth();
   const { voices, isLoading: loadingVoices } = useVoices();
   const [selectedVoice, setSelectedVoice] = useState<string | null>(null);
-  const [pitch, setPitch] = useState(1);
-  const [speed, setSpeed] = useState(1);
+  const [pitch, setPitch] = useState(1.0);
+  const [speed, setSpeed] = useState(1.0);
   const [stability, setStability] = useState(0.7);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [fadeAnim] = useState(new Animated.Value(0));
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 600,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
   const handleSelectVoice = (voiceId: string) => {
     setSelectedVoice(voiceId);
+    Vibration.vibrate(50);
   };
 
   const handleNext = async () => {
@@ -116,27 +132,30 @@ export default function VoiceScreen() {
 
   if (loadingVoices) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: Colors.softCream }}>
+      <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <Text>Loading voices...</Text>
+          <Sparkles size={32} color={Colors.primary} />
+          <Text style={styles.loadingText}>Loading voices...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: Colors.softCream }}>
-      <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      <Animated.View style={[styles.innerContainer, { opacity: fadeAnim }]}>
+        {/* Header */}
         <View style={styles.header}>
           <Pressable style={styles.backButton} onPress={handleBack}>
-            <ChevronLeft size={24} color={Colors.black} />
+            <ChevronLeft size={24} color={Colors.primary} />
           </Pressable>
 
-          <Text style={styles.headerTitle}>Choose Voice</Text>
+          <View style={styles.headerCenter}>
+            <Mic size={20} color={Colors.primary} />
+            <Text style={styles.headerTitle}>Choose Voice</Text>
+          </View>
 
-          <Pressable style={styles.settingsButton}>
-            <Settings size={20} color={Colors.black} />
-          </Pressable>
+          <View style={styles.headerRight} />
         </View>
 
         <ScrollView
@@ -144,145 +163,137 @@ export default function VoiceScreen() {
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Select a Voice</Text>
-            <Text style={styles.sectionDesc}>
-              Choose a voice that best fits your audiobook's style and tone.
-            </Text>
+          {/* Voice Selection */}
+          <VoiceSelector
+            voices={voices}
+            selectedVoiceId={selectedVoice}
+            onSelectVoice={handleSelectVoice}
+            voiceSettings={{
+              pitch,
+              speed,
+              stability,
+            }}
+          />
 
-            <VoiceSelector
-              voices={voices}
-              selectedVoiceId={selectedVoice}
-              onSelectVoice={handleSelectVoice}
-              voiceSettings={{
-                pitch,
-                speed,
-                stability,
-              }}
-            />
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Voice Settings</Text>
-            <Text style={styles.sectionDesc}>
-              Customize the voice to match your preferences. Click the play
-              button above to preview changes.
-            </Text>
-
-            <View style={styles.sliderContainer}>
-              <View style={styles.sliderLabel}>
-                <Volume2 size={18} color={Colors.black} />
-                <Text style={styles.sliderText}>Pitch</Text>
+          {/* Advanced Settings (Collapsible) */}
+          <View style={styles.advancedSection}>
+            <Pressable
+              style={styles.advancedToggle}
+              onPress={() => setShowAdvanced(!showAdvanced)}
+            >
+              <View style={styles.advancedHeader}>
+                <Settings size={18} color={Colors.gray[600]} />
+                <Text style={styles.advancedTitle}>Advanced Settings</Text>
               </View>
+              {showAdvanced ? (
+                <ChevronUp size={20} color={Colors.gray[600]} />
+              ) : (
+                <ChevronDown size={20} color={Colors.gray[600]} />
+              )}
+            </Pressable>
 
-              <View style={styles.sliderContent}>
-                <Slider
-                  value={pitch}
-                  onValueChange={setPitch}
-                  minimumValue={0.5}
-                  maximumValue={1.5}
-                  minimumTrackTintColor={Colors.black}
-                  maximumTrackTintColor={Colors.gray[300]}
-                  thumbTintColor={Colors.black}
-                  style={styles.slider}
-                />
+            {showAdvanced && (
+              <View style={styles.advancedContent}>
+                <Text style={styles.advancedDesc}>
+                  Fine-tune voice parameters for the perfect sound
+                </Text>
 
-                <View style={styles.sliderValues}>
-                  <Text style={styles.sliderValueText}>Low</Text>
-                  <Text style={styles.sliderValueText}>{pitch.toFixed(1)}</Text>
-                  <Text style={styles.sliderValueText}>High</Text>
+                {/* Pitch Slider */}
+                <View style={styles.sliderCard}>
+                  <View style={styles.sliderHeader}>
+                    <Text style={styles.sliderLabel}>Pitch</Text>
+                    <Text style={styles.sliderValue}>{pitch.toFixed(1)}</Text>
+                  </View>
+                  <Slider
+                    value={pitch}
+                    onValueChange={setPitch}
+                    minimumValue={0.5}
+                    maximumValue={1.5}
+                    minimumTrackTintColor={Colors.primary}
+                    maximumTrackTintColor={Colors.gray[200]}
+                    thumbTintColor={Colors.primary}
+                    style={styles.slider}
+                  />
+                  <View style={styles.sliderLabels}>
+                    <Text style={styles.sliderLabelText}>Lower</Text>
+                    <Text style={styles.sliderLabelText}>Higher</Text>
+                  </View>
                 </View>
-              </View>
-            </View>
 
-            <View style={styles.sliderContainer}>
-              <View style={styles.sliderLabel}>
-                <Volume2 size={18} color={Colors.black} />
-                <Text style={styles.sliderText}>Speed</Text>
-              </View>
+                {/* Speed Slider */}
+                <View style={styles.sliderCard}>
+                  <View style={styles.sliderHeader}>
+                    <Text style={styles.sliderLabel}>Speed</Text>
+                    <Text style={styles.sliderValue}>{speed.toFixed(1)}x</Text>
+                  </View>
+                  <Slider
+                    value={speed}
+                    onValueChange={setSpeed}
+                    minimumValue={0.5}
+                    maximumValue={1.5}
+                    minimumTrackTintColor={Colors.primary}
+                    maximumTrackTintColor={Colors.gray[200]}
+                    thumbTintColor={Colors.primary}
+                    style={styles.slider}
+                  />
+                  <View style={styles.sliderLabels}>
+                    <Text style={styles.sliderLabelText}>Slower</Text>
+                    <Text style={styles.sliderLabelText}>Faster</Text>
+                  </View>
+                </View>
 
-              <View style={styles.sliderContent}>
-                <Slider
-                  value={speed}
-                  onValueChange={setSpeed}
-                  minimumValue={0.5}
-                  maximumValue={1.5}
-                  minimumTrackTintColor={Colors.black}
-                  maximumTrackTintColor={Colors.gray[300]}
-                  thumbTintColor={Colors.black}
-                  style={styles.slider}
-                />
+                {/* Stability Slider */}
+                <View style={styles.sliderCard}>
+                  <View style={styles.sliderHeader}>
+                    <Text style={styles.sliderLabel}>Stability</Text>
+                    <Text style={styles.sliderValue}>
+                      {stability.toFixed(1)}
+                    </Text>
+                  </View>
+                  <Slider
+                    value={stability}
+                    onValueChange={setStability}
+                    minimumValue={0}
+                    maximumValue={1}
+                    minimumTrackTintColor={Colors.primary}
+                    maximumTrackTintColor={Colors.gray[200]}
+                    thumbTintColor={Colors.primary}
+                    style={styles.slider}
+                  />
+                  <View style={styles.sliderLabels}>
+                    <Text style={styles.sliderLabelText}>Creative</Text>
+                    <Text style={styles.sliderLabelText}>Consistent</Text>
+                  </View>
+                </View>
 
-                <View style={styles.sliderValues}>
-                  <Text style={styles.sliderValueText}>Slow</Text>
-                  <Text style={styles.sliderValueText}>
-                    {speed.toFixed(1)}x
+                <View style={styles.advancedTip}>
+                  <Text style={styles.tipText}>
+                    💡 Tip: Use the preview button above to test your settings
                   </Text>
-                  <Text style={styles.sliderValueText}>Fast</Text>
                 </View>
               </View>
-            </View>
-
-            <View style={styles.sliderContainer}>
-              <View style={styles.sliderLabel}>
-                <Volume2 size={18} color={Colors.black} />
-                <Text style={styles.sliderText}>Stability</Text>
-              </View>
-
-              <View style={styles.sliderContent}>
-                <Slider
-                  value={stability}
-                  onValueChange={setStability}
-                  minimumValue={0}
-                  maximumValue={1}
-                  minimumTrackTintColor={Colors.black}
-                  maximumTrackTintColor={Colors.gray[300]}
-                  thumbTintColor={Colors.black}
-                  style={styles.slider}
-                />
-
-                <View style={styles.sliderValues}>
-                  <Text style={styles.sliderValueText}>Creative</Text>
-                  <Text style={styles.sliderValueText}>
-                    {stability.toFixed(1)}
-                  </Text>
-                  <Text style={styles.sliderValueText}>Stable</Text>
-                </View>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.tipSection}>
-            <Text style={styles.tipTitle}>Voice Tips</Text>
-            <Text style={styles.tipText}>
-              • Higher stability produces more consistent narration
-            </Text>
-            <Text style={styles.tipText}>
-              • Adjust pitch to match character personalities
-            </Text>
-            <Text style={styles.tipText}>
-              • Try different speeds for different content types
-            </Text>
+            )}
           </View>
         </ScrollView>
 
+        {/* Simple Footer */}
         <View style={styles.footer}>
           <Button
             title="Back"
             onPress={handleBack}
-            variant="outline"
-            style={styles.footerButton}
-            icon={<ChevronLeft size={18} color={Colors.black} />}
+            variant="ghost"
+            style={styles.backFooterButton}
           />
           <Button
-            title="Next: Audio Effects"
+            title="Generate Audiobook"
             onPress={handleNext}
-            style={styles.footerButton}
-            icon={<ChevronRight size={18} color={Colors.white} />}
+            style={styles.generateButton}
+            icon={<Sparkles size={18} color={Colors.white} />}
             loading={isProcessing}
+            disabled={!selectedVoice}
           />
         </View>
-      </View>
+      </Animated.View>
     </SafeAreaView>
   );
 }
@@ -290,114 +301,165 @@ export default function VoiceScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.softCream,
-    justifyContent: 'space-between',
+    backgroundColor: Colors.softBackground,
+  },
+  innerContainer: {
+    flex: 1,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.softCream,
+    gap: Layout.spacing.md,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: Colors.gray[600],
+    fontWeight: '500',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: Layout.spacing.md,
+    paddingHorizontal: Layout.spacing.lg,
+    paddingVertical: Layout.spacing.md,
     backgroundColor: Colors.white,
     borderBottomWidth: 1,
     borderBottomColor: Colors.gray[200],
   },
   backButton: {
-    padding: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.gray[50],
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerCenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Layout.spacing.sm,
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: Colors.black,
+    fontWeight: '700',
+    color: Colors.primary,
   },
-  settingsButton: {
-    padding: 8,
+  headerRight: {
+    width: 40,
   },
   scrollView: {
     flex: 1,
   },
   content: {
-    padding: Layout.spacing.md,
+    padding: Layout.spacing.lg,
     paddingBottom: Layout.spacing.xl,
   },
-  section: {
-    marginBottom: Layout.spacing.xl,
+
+  advancedSection: {
+    marginTop: Layout.spacing.sm,
   },
-  sectionTitle: {
-    fontSize: 20,
+
+  advancedToggle: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    padding: Layout.spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.gray[200],
+    shadowColor: Colors.gray[900],
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  advancedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Layout.spacing.sm,
+  },
+  advancedTitle: {
+    fontSize: 16,
     fontWeight: '600',
-    color: Colors.black,
-    marginBottom: Layout.spacing.xs,
+    color: Colors.gray[700],
   },
-  sectionDesc: {
+  advancedContent: {
+    marginTop: Layout.spacing.md,
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    padding: Layout.spacing.lg,
+    borderWidth: 1,
+    borderColor: Colors.gray[200],
+  },
+  advancedDesc: {
     fontSize: 14,
     color: Colors.gray[600],
-    marginBottom: Layout.spacing.md,
+    marginBottom: Layout.spacing.lg,
+    textAlign: 'center',
   },
-  sliderContainer: {
-    marginBottom: Layout.spacing.md,
+  sliderCard: {
+    marginBottom: Layout.spacing.lg,
   },
-  sliderLabel: {
+  sliderHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: Layout.spacing.sm,
   },
-  sliderText: {
+  sliderLabel: {
     fontSize: 16,
-    fontWeight: '500',
-    color: Colors.black,
-    marginLeft: Layout.spacing.xs,
+    fontWeight: '600',
+    color: Colors.gray[900],
   },
-  sliderContent: {
-    paddingHorizontal: Layout.spacing.xs,
+  sliderValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.primary,
   },
   slider: {
     width: '100%',
     height: 40,
+    marginBottom: Layout.spacing.xs,
   },
-  sliderValues: {
+  sliderLabels: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 4,
   },
-  sliderValueText: {
+  sliderLabelText: {
     fontSize: 12,
     color: Colors.gray[500],
+    fontWeight: '500',
   },
-  tipSection: {
+  advancedTip: {
+    backgroundColor: Colors.gray[50],
+    borderRadius: 8,
     padding: Layout.spacing.md,
-    backgroundColor: Colors.lightPeach,
-    borderRadius: Layout.borderRadius.md,
-    marginBottom: Layout.spacing.lg,
-  },
-  tipTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.black,
-    marginBottom: Layout.spacing.sm,
+    marginTop: Layout.spacing.sm,
   },
   tipText: {
     fontSize: 14,
-    color: Colors.black,
-    marginBottom: 4,
+    color: Colors.gray[600],
+    textAlign: 'center',
   },
   footer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: Layout.spacing.md,
-    paddingHorizontal: Layout.spacing.md,
+    gap: Layout.spacing.md,
+    padding: Layout.spacing.lg,
+    backgroundColor: Colors.white,
     borderTopWidth: 1,
     borderTopColor: Colors.gray[200],
-    backgroundColor: Colors.white,
   },
-  footerButton: {
+  backFooterButton: {
     flex: 1,
-    marginHorizontal: Layout.spacing.xs,
+    borderRadius: 12,
+    minHeight: 50,
+  },
+  generateButton: {
+    flex: 2,
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    minHeight: 50,
   },
 });

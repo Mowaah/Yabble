@@ -37,8 +37,10 @@ export const mockAudiobooks: Audiobook[] = [
     createdAt: new Date('2025-04-02'),
     updatedAt: new Date('2025-04-02'),
     status: 'draft',
+    voiceId: undefined,
     textContent:
       'Recent advances in quantum computing have shown promising results...',
+    audioUrl: undefined,
   },
 ];
 
