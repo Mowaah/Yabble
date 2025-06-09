@@ -7,6 +7,7 @@ import {
   Alert,
   ActivityIndicator,
   Pressable,
+  Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
@@ -16,8 +17,11 @@ import {
   Text as TextIcon,
   Bot,
   ChevronRight,
+  Play,
+  Plus,
 } from 'lucide-react-native';
 import * as DocumentPicker from 'expo-document-picker';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
 import Button from '../../components/ui/Button';
@@ -29,6 +33,8 @@ import {
   validateTextForTTS,
   DocumentProcessingError,
 } from '../../utils/documentProcessor';
+
+const { width } = Dimensions.get('window');
 
 enum InputMethod {
   TEXT = 'text',
@@ -50,6 +56,7 @@ export default function CreateScreen() {
   const [title, setTitle] = useState('');
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [isProcessingFile, setIsProcessingFile] = useState(false);
+  const insets = useSafeAreaInsets();
 
   const handleMethodSelect = (method: InputMethod) => {
     if (isProcessingFile) return;
@@ -164,283 +171,288 @@ export default function CreateScreen() {
 
   if (isAuthLoading) {
     return (
-      <View style={[styles.container, styles.centerContent]}>
-        <ActivityIndicator size="large" color={Colors.black} />
-        <Text style={styles.loadingText}>Loading session...</Text>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
       </View>
     );
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-    >
-      <View style={styles.header}>
-        <View style={styles.aiBadge}>
-          <Bot size={14} color={Colors.gray[600]} />
-          <Text style={styles.aiBadgeText}>Powered by AI</Text>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>New Audiobook</Text>
+          <Text style={styles.headerSubtitle}>
+            Transform your content into AI speech
+          </Text>
         </View>
-        <Text style={styles.title}>AI Audiobook Studio</Text>
-        <Text style={styles.subtitle}>
-          Transform any content into lifelike speech
-        </Text>
-      </View>
-
-      <View style={styles.methodsContainer}>
-        <MethodButton
-          icon={<TextIcon size={24} color={Colors.black} />}
-          title="Text Input"
-          description="Type or paste your text directly"
-          tag="Instant"
-          onPress={() => handleMethodSelect(InputMethod.TEXT)}
-          isSelected={inputMethod === InputMethod.TEXT}
-        />
-        <MethodButton
-          icon={<FileUp size={24} color={Colors.black} />}
-          title="Upload File"
-          description="DOCX, PDF, or TXT files"
-          tag="Smart"
-          onPress={handleFileInput}
-          isSelected={inputMethod === InputMethod.FILE}
-          isLoading={isProcessingFile}
-        />
-        <MethodButton
-          icon={<LinkIcon size={24} color={Colors.black} />}
-          title="From URL"
-          description="Extract content from any webpage"
-          tag="Auto"
-          onPress={handleUrlInput}
-          isSelected={inputMethod === InputMethod.URL}
-        />
-      </View>
-
-      {inputMethod && (
-        <View style={styles.inputSection}>
-          {inputMethod === InputMethod.TEXT && (
-            <Input
-              label="Text to convert"
-              placeholder="Enter or paste your text here..."
-              value={text}
-              onChangeText={setText}
-              multiline
-              numberOfLines={6}
-              textAlignVertical="top"
-              inputStyle={styles.textArea}
-              labelStyle={styles.inputLabel}
-            />
-          )}
-          {inputMethod === InputMethod.FILE && selectedFile && (
-            <View style={styles.fileInfo}>
-              <Text style={styles.inputLabel}>Selected File</Text>
-              <Text style={styles.fileName} numberOfLines={1}>
-                {selectedFile}
-              </Text>
+        {!inputMethod ? (
+          // Step 1: Choose Method
+          <View style={styles.stepContainer}>
+            <View style={styles.stepHeader}>
+              <View style={styles.stepNumber}>
+                <Text style={styles.stepNumberText}>1</Text>
+              </View>
+              <Text style={styles.stepTitle}>Choose your source</Text>
             </View>
-          )}
-          {inputMethod === InputMethod.URL && (
-            <Input
-              label="Article URL"
-              placeholder="https://example.com/article"
-              value={url}
-              onChangeText={setUrl}
-              keyboardType="url"
-              labelStyle={styles.inputLabel}
-            />
-          )}
-          <Input
-            label="Audiobook Title"
-            placeholder="Enter a title for your audiobook"
-            value={title}
-            onChangeText={setTitle}
-            labelStyle={styles.inputLabel}
-            containerStyle={{ marginTop: Layout.spacing.md }}
-          />
-          <Button
-            title="Next: Choose Voice"
-            onPress={handleNext}
-            fullWidth
-            style={styles.nextButton}
-            icon={<Mic size={18} color={Colors.white} />}
-            loading={isCreating}
-          />
-        </View>
-      )}
 
-      <View style={styles.tipContainer}>
-        <Text style={styles.tipTitle}>Tips for best results:</Text>
-        <Text style={styles.tipText}>
-          • Use proper punctuation for natural pauses
-        </Text>
-        <Text style={styles.tipText}>• Mark dialogue with quotation marks</Text>
-        <Text style={styles.tipText}>• Check for spelling errors</Text>
-      </View>
-    </ScrollView>
+            <View style={styles.optionsGrid}>
+              <Pressable
+                style={styles.optionCard}
+                onPress={() => handleMethodSelect(InputMethod.TEXT)}
+              >
+                <View style={styles.optionIcon}>
+                  <TextIcon size={32} color={Colors.primary} />
+                </View>
+                <Text style={styles.optionTitle}>Text</Text>
+                <Text style={styles.optionDesc}>Type directly</Text>
+              </Pressable>
+
+              <Pressable
+                style={styles.optionCard}
+                onPress={handleFileInput}
+                disabled={isProcessingFile}
+              >
+                <View style={styles.optionIcon}>
+                  {isProcessingFile ? (
+                    <ActivityIndicator color={Colors.primary} />
+                  ) : (
+                    <FileUp size={32} color={Colors.primary} />
+                  )}
+                </View>
+                <Text style={styles.optionTitle}>File</Text>
+                <Text style={styles.optionDesc}>Upload document</Text>
+              </Pressable>
+
+              <Pressable
+                style={[styles.optionCard, styles.disabledCard]}
+                onPress={handleUrlInput}
+              >
+                <View style={styles.optionIcon}>
+                  <LinkIcon size={32} color={Colors.gray[400]} />
+                </View>
+                <Text style={[styles.optionTitle, styles.disabledText]}>
+                  URL
+                </Text>
+                <Text style={[styles.optionDesc, styles.disabledText]}>
+                  Coming soon
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : (
+          // Step 2: Add Content
+          <View style={styles.stepContainer}>
+            <View style={styles.stepHeader}>
+              <View style={styles.stepNumber}>
+                <Text style={styles.stepNumberText}>2</Text>
+              </View>
+              <Text style={styles.stepTitle}>Add your content</Text>
+            </View>
+
+            <View>
+              {inputMethod === InputMethod.TEXT && (
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>Your Text</Text>
+                  <Input
+                    placeholder="Start typing your content here..."
+                    value={text}
+                    onChangeText={setText}
+                    multiline
+                    textAlignVertical="top"
+                    inputStyle={styles.textInput}
+                  />
+                </View>
+              )}
+
+              {inputMethod === InputMethod.FILE && selectedFile && (
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>Selected File</Text>
+                  <View style={styles.fileDisplay}>
+                    <FileUp size={24} color={Colors.primary} />
+                    <Text style={styles.fileName}>{selectedFile}</Text>
+                    <View style={styles.fileStatus}>
+                      <Text style={styles.fileStatusText}>Ready</Text>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {inputMethod === InputMethod.URL && (
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>Website URL</Text>
+                  <Input
+                    placeholder="https://example.com/article"
+                    value={url}
+                    onChangeText={setUrl}
+                    keyboardType="url"
+                  />
+                </View>
+              )}
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>Audiobook Title</Text>
+                <Input
+                  placeholder="Give your audiobook a title"
+                  value={title}
+                  onChangeText={setTitle}
+                />
+              </View>
+
+              <View style={styles.actionButtons}>
+                <Button
+                  title="Back"
+                  variant="ghost"
+                  onPress={() => setInputMethod(null)}
+                  style={styles.backButton}
+                />
+                <Button
+                  title="Create"
+                  onPress={handleNext}
+                  loading={isCreating}
+                  icon={<Play size={18} color={Colors.white} />}
+                  style={styles.createButton}
+                />
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* Quick Tips */}
+        <View style={styles.tipsSection}>
+          <Text style={styles.tipsTitle}>💡 Quick Tips</Text>
+          <Text style={styles.tipItem}>
+            • Use clear punctuation for natural speech
+          </Text>
+          <Text style={styles.tipItem}>
+            • Longer content works better for AI voices
+          </Text>
+          <Text style={styles.tipItem}>• Check spelling before creating</Text>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
-
-const MethodButton = ({
-  icon,
-  title,
-  description,
-  tag,
-  onPress,
-  isSelected,
-  isLoading,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  tag: string;
-  onPress: () => void;
-  isSelected: boolean;
-  isLoading?: boolean;
-}) => (
-  <Pressable
-    onPress={onPress}
-    style={[styles.methodButton, isSelected && styles.selectedMethodButton]}
-    disabled={isLoading}
-  >
-    <View style={styles.methodIcon}>{icon}</View>
-    <View style={styles.methodTextContainer}>
-      <View style={styles.methodTitleContainer}>
-        <Text style={styles.methodTitle}>{title}</Text>
-        <View style={styles.tag}>
-          <Text style={styles.tagText}>{tag}</Text>
-        </View>
-      </View>
-      <Text style={styles.methodDesc}>{description}</Text>
-    </View>
-    {isLoading ? (
-      <ActivityIndicator color={Colors.black} />
-    ) : (
-      <ChevronRight size={20} color={Colors.gray[400]} />
-    )}
-  </Pressable>
-);
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.softCream,
+    backgroundColor: Colors.softBackground,
   },
-  content: {
-    padding: Layout.spacing.md,
-    paddingBottom: Layout.spacing.xl * 2,
-  },
-  centerContent: {
+  loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.softCream,
   },
   loadingText: {
     marginTop: Layout.spacing.sm,
+    color: Colors.gray[500],
     fontSize: 16,
-    color: Colors.gray[600],
   },
   header: {
-    alignItems: 'center',
-    marginBottom: Layout.spacing.xl,
-    paddingTop: Layout.spacing.lg,
+    paddingBottom: Layout.spacing.xl,
   },
-  aiBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: Colors.white,
-    marginBottom: Layout.spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.gray[200],
-  },
-  aiBadgeText: {
-    color: Colors.gray[600],
-    fontSize: 12,
-    marginLeft: 6,
-    fontWeight: '500',
-  },
-  title: {
+  headerTitle: {
     fontSize: 32,
-    fontWeight: 'bold',
-    color: Colors.black,
-    textAlign: 'center',
-    marginBottom: Layout.spacing.xs,
+    fontWeight: '800',
+    color: Colors.primary,
+    letterSpacing: -1,
   },
-  subtitle: {
+  headerSubtitle: {
     fontSize: 18,
-    color: Colors.gray[600],
-    textAlign: 'center',
+    color: Colors.gray[500],
+    marginTop: 4,
   },
-  methodsContainer: {
-    marginBottom: Layout.spacing.lg,
-  },
-  methodButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.white,
-    padding: Layout.spacing.md,
-    borderRadius: Layout.borderRadius.lg,
-    marginBottom: Layout.spacing.md,
-    borderWidth: 1.5,
-    borderColor: Colors.gray[200],
-    shadowColor: Colors.gray[400],
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  selectedMethodButton: {
-    borderColor: Colors.orange,
-    backgroundColor: Colors.lightPeach,
-  },
-  methodIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: Layout.borderRadius.md,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: Colors.softCream,
-    marginRight: Layout.spacing.md,
-  },
-  methodTextContainer: {
+  scrollView: {
     flex: 1,
   },
-  methodTitleContainer: {
+  scrollContent: {
+    padding: Layout.spacing.lg,
+    paddingBottom: Layout.spacing.xl * 2,
+  },
+  stepContainer: {
+    marginBottom: Layout.spacing.xl,
+  },
+  stepHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: Layout.spacing.xl,
+  },
+  stepNumber: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: Layout.spacing.md,
+  },
+  stepNumberText: {
+    color: Colors.white,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  stepTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: Colors.gray[900],
+    letterSpacing: -0.5,
+  },
+  optionsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: Layout.spacing.md,
+  },
+  optionCard: {
+    flex: 1,
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    padding: Layout.spacing.lg,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: Colors.gray[200],
+    shadowColor: Colors.gray[900],
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  disabledCard: {
+    opacity: 0.5,
+  },
+  optionIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: Colors.gray[50],
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Layout.spacing.md,
+  },
+  optionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.gray[900],
     marginBottom: 4,
   },
-  methodTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: Colors.black,
+  optionDesc: {
+    fontSize: 12,
+    color: Colors.gray[500],
+    textAlign: 'center',
   },
-  tag: {
-    marginLeft: Layout.spacing.sm,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    backgroundColor: Colors.orange,
+  disabledText: {
+    color: Colors.gray[400],
   },
-  tagText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: Colors.white,
-  },
-  methodDesc: {
-    fontSize: 14,
-    color: Colors.gray[600],
-  },
-  inputSection: {
-    backgroundColor: Colors.white,
-    padding: Layout.spacing.md,
-    borderRadius: Layout.borderRadius.lg,
+  inputContainer: {
     marginBottom: Layout.spacing.lg,
-    borderWidth: 1,
-    borderColor: Colors.gray[200],
   },
   inputLabel: {
     fontSize: 16,
@@ -448,42 +460,78 @@ const styles = StyleSheet.create({
     color: Colors.gray[800],
     marginBottom: Layout.spacing.sm,
   },
-  textArea: {
-    minHeight: 120,
-    backgroundColor: Colors.gray[100],
-    borderColor: Colors.gray[300],
-    color: Colors.black,
+  textInput: {
+    backgroundColor: 'transparent',
+    color: Colors.gray[900],
+    fontSize: 16,
+    minHeight: 240,
+    borderWidth: 0,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
   },
-  fileInfo: {
-    marginBottom: Layout.spacing.md,
+  fileDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.gray[50],
+    padding: Layout.spacing.md,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.gray[200],
   },
   fileName: {
-    color: Colors.black,
+    flex: 1,
+    color: Colors.gray[900],
     fontSize: 16,
-    backgroundColor: Colors.gray[100],
-    padding: Layout.spacing.md,
-    borderRadius: Layout.borderRadius.md,
-    overflow: 'hidden',
+    marginLeft: Layout.spacing.sm,
   },
-  nextButton: {
-    marginTop: Layout.spacing.lg,
-    backgroundColor: Colors.orange,
+  fileStatus: {
+    backgroundColor: Colors.cyberGreen,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
-  tipContainer: {
-    marginTop: Layout.spacing.lg,
-    padding: Layout.spacing.md,
-    backgroundColor: Colors.lightPeach,
-    borderRadius: Layout.borderRadius.md,
-  },
-  tipTitle: {
-    fontSize: 16,
+  fileStatusText: {
+    color: Colors.white,
+    fontSize: 12,
     fontWeight: '600',
-    color: Colors.black,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: Layout.spacing.md,
+    marginTop: Layout.spacing.md,
+  },
+  backButton: {
+    flex: 1,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: Colors.gray[300],
+  },
+  createButton: {
+    flex: 2,
+    backgroundColor: Colors.primary,
+  },
+  tipsSection: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    padding: Layout.spacing.lg,
+    marginTop: Layout.spacing.lg,
+    borderWidth: 1,
+    borderColor: Colors.gray[200],
+    shadowColor: Colors.gray[900],
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  tipsTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.gray[900],
     marginBottom: Layout.spacing.sm,
   },
-  tipText: {
+  tipItem: {
     fontSize: 14,
-    color: Colors.gray[700],
+    color: Colors.gray[600],
     marginBottom: Layout.spacing.xs,
     lineHeight: 20,
   },

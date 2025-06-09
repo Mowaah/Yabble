@@ -9,34 +9,34 @@ import {
   Platform,
   Modal,
 } from 'react-native';
-import {
-  Search,
-  Filter,
-  Headphones,
-  CheckCircle2,
-  XCircle,
-} from 'lucide-react-native';
+import { Search, Headphones, CheckCircle2, XCircle } from 'lucide-react-native';
 import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
 import AudiobookCard from '../../components/audiobook/AudiobookCard';
 import Input from '../../components/ui/Input';
 import { useAudiobooks } from '../../hooks/useAudiobooks';
 import type { Tables } from '../../lib/database';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { prepareAudioFile, FilePreparationError } from '../../utils/fileUtils';
 import {
   saveAudioToDevice,
   shareAudioFile,
   MediaError,
 } from '../../utils/mediaUtils';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { audioEffects } from '../../lib/audio';
 
-type FilterStatus = 'all' | 'completed' | 'draft';
+type FilterStatus = 'completed' | 'draft' | 'saved';
 type ModalStatus = 'idle' | 'loading' | 'success' | 'error';
 
 export default function LibraryScreen() {
   const { audiobooks, isLoading, error, refreshAudiobooks } = useAudiobooks();
+  const navigation = useNavigation();
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
+  const [filterStatus, setFilterStatus] = useState<FilterStatus>('completed');
+  const [favorites, setFavorites] = useState<string[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const insets = useSafeAreaInsets();
 
   const [showModal, setShowModal] = useState(false);
   const [modalStatus, setModalStatus] = useState<ModalStatus>('idle');
@@ -48,16 +48,70 @@ export default function LibraryScreen() {
     }, [])
   );
 
-  const filteredBooks = audiobooks.filter((book) => {
-    const matchesSearch = book.title
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase());
-    const matchesFilter =
-      filterStatus === 'all' || book.status === filterStatus;
-    return matchesSearch && matchesFilter;
-  });
+  // Stop audio when leaving the library screen
+  useFocusEffect(
+    useCallback(() => {
+      const unsubscribe = navigation.addListener('blur', () => {
+        // Stop all audio when leaving the library
+        audioEffects.stopAllAudio().catch(console.error);
+      });
 
-  const renderFilterTab = (label: string, value: FilterStatus) => (
+      return unsubscribe;
+    }, [navigation])
+  );
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await refreshAudiobooks();
+    setIsRefreshing(false);
+  };
+
+  const getFilterCount = (status: FilterStatus) => {
+    if (status === 'saved') return 0; // Placeholder for saved audiobooks
+    return audiobooks.filter((book) => book.status === status).length;
+  };
+
+  const toggleFavorite = (bookId: string) => {
+    setFavorites(
+      (prev) =>
+        prev.includes(bookId)
+          ? prev.filter((id) => id !== bookId)
+          : [bookId, ...prev] // Add to beginning to show at top
+    );
+  };
+
+  const getSortedBooks = () => {
+    let filteredBooks = audiobooks.filter((book) => {
+      const matchesSearch = book.title
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase());
+
+      let matchesFilter = false;
+      if (filterStatus === 'saved') {
+        matchesFilter = false; // No saved books yet
+      } else {
+        matchesFilter = book.status === filterStatus;
+      }
+
+      return matchesSearch && matchesFilter;
+    });
+
+    // Sort favorites to top
+    return filteredBooks.sort((a, b) => {
+      const aIsFav = favorites.includes(a.id);
+      const bIsFav = favorites.includes(b.id);
+
+      if (aIsFav && !bIsFav) return -1;
+      if (!aIsFav && bIsFav) return 1;
+      return 0;
+    });
+  };
+
+  const renderFilterTab = (
+    label: string,
+    value: FilterStatus,
+    count: number
+  ) => (
     <Pressable
       style={[
         styles.filterTab,
@@ -73,6 +127,21 @@ export default function LibraryScreen() {
       >
         {label}
       </Text>
+      <View
+        style={[
+          styles.filterCount,
+          filterStatus === value && styles.activeFilterCount,
+        ]}
+      >
+        <Text
+          style={[
+            styles.filterCountText,
+            filterStatus === value && styles.activeFilterCountText,
+          ]}
+        >
+          {count}
+        </Text>
+      </View>
     </Pressable>
   );
 
@@ -95,12 +164,29 @@ export default function LibraryScreen() {
       );
     }
 
+    const getEmptyMessage = () => {
+      if (searchQuery) {
+        return `No audiobooks match "${searchQuery}"`;
+      }
+
+      switch (filterStatus) {
+        case 'completed':
+          return 'No completed audiobooks yet';
+        case 'draft':
+          return 'No drafts in progress';
+        case 'saved':
+          return 'No saved audiobooks from hub yet';
+        default:
+          return 'No audiobooks found';
+      }
+    };
+
     return (
       <View style={styles.emptyContainer}>
         <View style={styles.emptyIconContainer}>
           <Headphones size={48} color={Colors.gray[400]} />
         </View>
-        <Text style={styles.emptyTitle}>No audiobooks found</Text>
+        <Text style={styles.emptyTitle}>{getEmptyMessage()}</Text>
         <Text style={styles.emptyText}>
           {searchQuery
             ? 'Try a different search term'
@@ -250,14 +336,22 @@ export default function LibraryScreen() {
   }) => (
     <AudiobookCard
       book={item}
+      isFavorite={favorites.includes(item.id)}
+      onToggleFavorite={() => toggleFavorite(item.id)}
       onShare={() => handleShare(item)}
       onDownload={() => handleDownload(item)}
       onDelete={refreshAudiobooks}
+      onPublishToHub={() => {
+        // Placeholder for publish to hub functionality
+        console.log('Publishing to hub:', item.title);
+      }}
     />
   );
 
+  const sortedBooks = getSortedBooks();
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <Modal
         transparent={true}
         animationType="fade"
@@ -299,25 +393,25 @@ export default function LibraryScreen() {
         />
 
         <View style={styles.filterContainer}>
-          {renderFilterTab('All', 'all')}
-          {renderFilterTab('Completed', 'completed')}
-          {renderFilterTab('Drafts', 'draft')}
-
-          <Pressable style={styles.filterButton}>
-            <Filter size={18} color={Colors.black} />
-          </Pressable>
+          {renderFilterTab(
+            'Completed',
+            'completed',
+            getFilterCount('completed')
+          )}
+          {renderFilterTab('Drafts', 'draft', getFilterCount('draft'))}
+          {renderFilterTab('Saved', 'saved', getFilterCount('saved'))}
         </View>
       </View>
 
       <FlatList
-        data={filteredBooks}
+        data={sortedBooks}
         renderItem={renderAudiobookItem}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={renderEmptyState}
-        onRefresh={refreshAudiobooks}
-        refreshing={isLoading}
+        onRefresh={handleRefresh}
+        refreshing={isRefreshing}
       />
     </View>
   );
@@ -326,7 +420,7 @@ export default function LibraryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.softCream,
+    backgroundColor: Colors.softBackground,
   },
   header: {
     padding: Layout.spacing.md,
@@ -337,7 +431,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: '600',
-    color: Colors.black,
+    color: Colors.primary,
     marginBottom: Layout.spacing.sm,
   },
   searchContainer: {
@@ -348,27 +442,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   filterTab: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     borderRadius: Layout.borderRadius.full,
     marginRight: Layout.spacing.sm,
+    backgroundColor: Colors.gray[100],
   },
   activeFilterTab: {
-    backgroundColor: Colors.black,
+    backgroundColor: Colors.primary,
   },
   filterTabText: {
     fontSize: 14,
-    color: Colors.black,
+    color: Colors.gray[600],
+    fontWeight: '500',
   },
   activeFilterTabText: {
     color: Colors.white,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   filterButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: Colors.lightPeach,
+    backgroundColor: Colors.accent,
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 'auto',
@@ -395,7 +493,7 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: Colors.black,
+    color: Colors.primary,
     marginBottom: Layout.spacing.xs,
   },
   emptyText: {
@@ -418,7 +516,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(15, 15, 35, 0.8)',
   },
   modalContent: {
     backgroundColor: Colors.white,
@@ -427,7 +525,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 5,
-    shadowColor: Colors.black,
+    shadowColor: Colors.primary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
@@ -437,13 +535,13 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: Layout.spacing.md,
     fontSize: 16,
-    color: Colors.black,
+    color: Colors.primary,
     textAlign: 'center',
     paddingHorizontal: Layout.spacing.sm,
   },
   okButton: {
     marginTop: Layout.spacing.lg,
-    backgroundColor: Colors.orange || '#FF8C00',
+    backgroundColor: Colors.accent,
     paddingVertical: Layout.spacing.sm,
     paddingHorizontal: Layout.spacing.xl,
     borderRadius: Layout.borderRadius.md,
@@ -452,5 +550,27 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontSize: 16,
     fontWeight: '600',
+  },
+  filterCount: {
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 6,
+    borderRadius: 10,
+    backgroundColor: Colors.white,
+    marginLeft: Layout.spacing.xs,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  activeFilterCount: {
+    backgroundColor: Colors.white,
+  },
+  filterCountText: {
+    fontSize: 11,
+    color: Colors.gray[700],
+    fontWeight: '600',
+  },
+  activeFilterCountText: {
+    color: Colors.black,
+    fontWeight: '700',
   },
 });
