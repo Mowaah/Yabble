@@ -8,6 +8,23 @@ type ProfileUpdate = Tables['profiles']['Update'] & {
   avatarFile?: { uri: string; name: string };
 };
 
+const getContentType = (name: string) => {
+  const extension = name.split('.').pop()?.toLowerCase();
+  switch (extension) {
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'png':
+      return 'image/png';
+    case 'gif':
+      return 'image/gif';
+    case 'heic':
+      return 'image/heic';
+    default:
+      return 'image/jpeg'; // Default to JPEG
+  }
+};
+
 export function useProfile() {
   const { session } = useAuth();
   const [profile, setProfile] = useState<Tables['profiles']['Row'] | null>(
@@ -43,15 +60,18 @@ export function useProfile() {
       if (updates.avatarFile) {
         const { uri, name } = updates.avatarFile;
         const arraybuffer = await fetch(uri).then((res) => res.arrayBuffer());
+        const contentType = getContentType(name);
 
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('avatars')
           .upload(`${session.user.id}/${name}`, arraybuffer, {
-            contentType: 'image/jpeg', // Or other appropriate mime type
+            contentType,
             upsert: true,
           });
 
-        if (uploadError) throw uploadError;
+        if (uploadError) {
+          throw uploadError;
+        }
 
         const { data: publicUrlData } = supabase.storage
           .from('avatars')
