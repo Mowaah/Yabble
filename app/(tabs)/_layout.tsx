@@ -93,6 +93,7 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: 'Profile',
+          headerShown: false,
           tabBarIcon: ({ color, size, focused }) => (
             <User
               size={focused ? size + 2 : size}
