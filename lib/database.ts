@@ -1,11 +1,11 @@
-import { db } from './supabase';
+import { db as supabase } from './supabase';
 import { Database } from '../types/supabase';
 
 export type Tables = Database['public']['Tables'];
 
 // Audiobooks
 export async function getAudiobooks(userId: string) {
-  const { data, error } = await db
+  const { data, error } = await supabase
     .from('audiobooks')
     .select('*')
     .eq('user_id', userId)
@@ -17,7 +17,7 @@ export async function getAudiobooks(userId: string) {
 export async function createAudiobook(
   audiobook: Tables['audiobooks']['Insert']
 ) {
-  const { data, error } = await db
+  const { data, error } = await supabase
     .from('audiobooks')
     .insert(audiobook)
     .select()
@@ -30,7 +30,7 @@ export async function updateAudiobook(
   id: string,
   updates: Partial<Tables['audiobooks']['Update']>
 ) {
-  const { data, error } = await db
+  const { data, error } = await supabase
     .from('audiobooks')
     .update(updates)
     .eq('id', id)
@@ -41,7 +41,7 @@ export async function updateAudiobook(
 }
 
 export async function deleteAudiobook(id: string) {
-  const { error } = await db.from('audiobooks').delete().eq('id', id);
+  const { error } = await supabase.from('audiobooks').delete().eq('id', id);
 
   if (error) {
     console.error('Delete error:', error);
@@ -54,7 +54,7 @@ export async function deleteAudiobook(id: string) {
 // User Profiles
 export async function getUserProfile(userId: string) {
   try {
-    const { data, error } = await db
+    const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', userId)
@@ -73,7 +73,7 @@ export async function updateUserProfile(
   updates: Partial<Tables['profiles']['Update']>
 ) {
   try {
-    const { data, error } = await db
+    const { data, error } = await supabase
       .from('profiles')
       .update(updates)
       .eq('id', userId)
@@ -90,7 +90,7 @@ export async function updateUserProfile(
 
 // Voice Settings
 export async function getVoiceSettings(userId: string) {
-  const { data, error } = await db
+  const { data, error } = await supabase
     .from('voice_settings')
     .select('*')
     .eq('user_id', userId);
@@ -101,7 +101,7 @@ export async function getVoiceSettings(userId: string) {
 export async function saveVoiceSettings(
   settings: Tables['voice_settings']['Insert']
 ) {
-  const { data, error } = await db
+  const { data, error } = await supabase
     .from('voice_settings')
     .insert(settings)
     .select()

@@ -1,4 +1,10 @@
-import React, { useState } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
+} from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,7 +13,11 @@ import {
   Image,
   Pressable,
   ActivityIndicator,
+  TextInput,
+  Alert,
+  Dimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   User,
   Settings,
@@ -17,6 +27,18 @@ import {
   Volume2,
   Shield,
   LogOut,
+  Edit2,
+  Check,
+  Award,
+  BookOpen,
+  Clock,
+  Sparkles,
+  Trophy,
+  Target,
+  Calendar,
+  Star,
+  Image as ImageIcon,
+  Trash2,
 } from 'lucide-react-native';
 import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
@@ -25,356 +47,835 @@ import Card from '../../components/ui/Card';
 import { useProfile } from '../../hooks/useProfile';
 import { signOut as supabaseSignOut } from '../../lib/auth';
 import { useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import {
+  BottomSheetModal,
+  BottomSheetView,
+  BottomSheetBackdrop,
+} from '@gorhom/bottom-sheet';
 
-export default function ProfileScreen() {
+const { width } = Dimensions.get('window');
+
+// Enhanced color palette
+const EnhancedColors = {
+  ...Colors,
+  accent: '#6366F1', // Indigo accent
+  success: '#10B981', // Emerald
+  warning: '#F59E0B', // Amber
+  info: '#3B82F6', // Blue
+  surface: '#F8FAFC', // Light surface
+  cardShadow: 'rgba(15, 23, 42, 0.08)',
+  bottomSheetHandle: 'rgba(0, 0, 0, 0.1)',
+  gradient: {
+    primary: ['#8B5CF6', '#A855F7'],
+    secondary: ['#06B6D4', '#0891B2'],
+    accent: ['#EC4899', '#BE185D'],
+  },
+  glass: 'rgba(255, 255, 255, 0.1)',
+};
+
+function ProfileScreenContent() {
   const {
     profile,
     isLoading: profileLoading,
     error: profileError,
+    updateProfile,
   } = useProfile();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+
+  const [isEditMode, setIsEditMode] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [signOutError, setSignOutError] = useState<string | null>(null);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [name, setName] = useState(profile?.name || '');
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  // Bottom sheet state
+  const bottomSheetModalRef = useRef<BottomSheetModal>(null);
+  const snapPoints = useMemo(() => ['33%'], []);
+
+  const handlePresentModalPress = useCallback(() => {
+    bottomSheetModalRef.current?.present();
+  }, []);
+
+  const handleCloseModalPress = useCallback(() => {
+    bottomSheetModalRef.current?.dismiss();
+  }, []);
+
+  const renderBackdrop = useCallback(
+    (props: any) => (
+      <BottomSheetBackdrop
+        {...props}
+        disappearsOnIndex={-1}
+        appearsOnIndex={0}
+        pressBehavior="close"
+        opacity={0.5}
+      />
+    ),
+    []
+  );
+
+  useEffect(() => {
+    if (profile?.name) {
+      setName(profile.name);
+    }
+  }, [profile?.name]);
+
+  const handleToggleEditMode = async () => {
+    if (isEditMode && isEditingName) {
+      await handleNameUpdate();
+    }
+    setIsEditMode(!isEditMode);
+  };
 
   const handleSignOut = async () => {
     setIsSigningOut(true);
-    setSignOutError(null);
     try {
-      const { error } = await supabaseSignOut();
-      if (error) {
-        throw error;
-      }
+      await supabaseSignOut();
       router.replace('/(auth)/sign-in');
     } catch (e: any) {
-      setSignOutError(e.message || 'Failed to sign out');
+      Alert.alert('Sign Out Error', e.message || 'Failed to sign out');
     } finally {
       setIsSigningOut(false);
     }
   };
 
+  const handleNameUpdate = async () => {
+    if (!name.trim()) {
+      Alert.alert('Validation Error', 'Name cannot be empty.');
+      return;
+    }
+    if (!profile) return;
+
+    setIsUpdating(true);
+    try {
+      await updateProfile({ ...profile, name });
+      setIsEditingName(false);
+    } catch (error) {
+      Alert.alert('Update Error', 'Failed to update your name.');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleAvatarChange = async () => {
+    handleCloseModalPress();
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert(
+        'Permission Denied',
+        'Sorry, we need camera roll permissions to make this work!'
+      );
+      return;
+    }
+
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 1,
+    });
+
+    if (!result.canceled) {
+      const { assets } = result;
+      if (assets && assets.length > 0) {
+        const { uri } = assets[0];
+        const fileName = uri.split('/').pop();
+        const file = {
+          uri,
+          name: fileName || `avatar-${Date.now()}.jpg`,
+        };
+
+        if (profile) {
+          setIsUpdating(true);
+          try {
+            await updateProfile({ ...profile, avatarFile: file });
+          } catch (error) {
+            Alert.alert('Upload Error', 'Failed to update your avatar.');
+          } finally {
+            setIsUpdating(false);
+          }
+        }
+      }
+    }
+  };
+
+  const handleAvatarRemove = async () => {
+    handleCloseModalPress();
+    if (profile) {
+      setIsUpdating(true);
+      try {
+        await updateProfile({
+          ...profile,
+          avatar_url: null,
+          avatarFile: undefined,
+        });
+      } catch (error) {
+        Alert.alert('Remove Error', 'Failed to remove your avatar.');
+      } finally {
+        setIsUpdating(false);
+      }
+    }
+  };
+
   const menuItems = [
     {
-      icon: <Settings size={20} color={Colors.black} />,
+      icon: <Settings size={22} color={EnhancedColors.accent} />,
       title: 'Account Settings',
+      subtitle: 'Privacy, security & preferences',
       onPress: () => {},
+      color: EnhancedColors.accent,
     },
     {
-      icon: <Volume2 size={20} color={Colors.black} />,
-      title: 'Voice Preferences',
-      onPress: () => {},
-    },
-    {
-      icon: <CreditCard size={20} color={Colors.black} />,
+      icon: <CreditCard size={22} color={EnhancedColors.success} />,
       title: 'Subscription',
+      subtitle: 'Manage your plan & billing',
       onPress: () => {},
+      color: EnhancedColors.success,
     },
     {
-      icon: <Shield size={20} color={Colors.black} />,
-      title: 'Privacy',
+      icon: <Share2 size={22} color={EnhancedColors.info} />,
+      title: 'Share & Earn',
+      subtitle: 'Invite friends and get rewards',
       onPress: () => {},
+      color: EnhancedColors.info,
     },
     {
-      icon: <Share2 size={20} color={Colors.black} />,
-      title: 'Share App',
+      icon: <Shield size={22} color={EnhancedColors.warning} />,
+      title: 'Privacy & Security',
+      subtitle: 'Control your data & safety',
       onPress: () => {},
+      color: EnhancedColors.warning,
+    },
+  ];
+
+  const achievements = [
+    {
+      icon: <BookOpen size={18} color={Colors.white} />,
+      value: profile?.created_books || 0,
+      label: 'Books Created',
+      color: EnhancedColors.success,
     },
     {
-      icon: <LogOut size={20} color={Colors.error} />,
-      title: 'Sign Out',
-      textColor: Colors.error,
-      onPress: handleSignOut,
+      icon: <Clock size={18} color={Colors.white} />,
+      value: '12h',
+      label: 'Reading Time',
+      color: EnhancedColors.info,
+    },
+    {
+      icon: <Trophy size={18} color={Colors.white} />,
+      value: 5,
+      label: 'Achievements',
+      color: EnhancedColors.warning,
+    },
+    {
+      icon: <Target size={18} color={Colors.white} />,
+      value: '7',
+      label: 'Streak Days',
+      color: EnhancedColors.accent,
     },
   ];
 
   if (profileLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.black} />
-      </View>
-    );
-  }
-
-  if (profileError) {
-    return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>
-          Error loading profile: {profileError}
-        </Text>
-        <Button title="Try Again" onPress={() => window.location.reload()} />
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={styles.loadingText}>Loading your profile...</Text>
       </View>
     );
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={styles.profileHeader}>
-        <Image
-          source={{
-            uri:
-              profile?.avatar_url ||
-              'https://images.pexels.com/photos/614810/pexels-photo-614810.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-          }}
-          style={styles.avatar}
-        />
+    <>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Enhanced Header with Gradient */}
+        <View style={[styles.profileHeader, { paddingTop: insets.top + 20 }]}>
+          <View style={styles.headerGradient} />
 
-        <View style={styles.profileInfo}>
-          <Text style={styles.profileName}>
-            {profile?.name || 'Anonymous User'}
-          </Text>
-          <Text style={styles.profileEmail}>{profile?.email}</Text>
-
-          <View style={styles.profileStats}>
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>
-                {profile?.created_books || 0}
-              </Text>
-              <Text style={styles.statLabel}>Books</Text>
-            </View>
-
-            <View style={styles.statDivider} />
-
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>
-                {profile?.is_premium ? 'Premium' : 'Free'}
-              </Text>
-              <Text style={styles.statLabel}>Plan</Text>
-            </View>
-          </View>
-        </View>
-      </View>
-
-      {!profile?.is_premium && (
-        <Card style={styles.premiumCard}>
-          <View style={styles.premiumContent}>
-            <View style={styles.premiumInfo}>
-              <Text style={styles.premiumTitle}>Upgrade to Premium</Text>
-              <Text style={styles.premiumDesc}>
-                Unlock all voices and advanced features
-              </Text>
-            </View>
-
-            <Button
-              title="Upgrade"
-              variant="secondary"
-              onPress={() => {}}
-              style={styles.upgradeButton}
-            />
-          </View>
-        </Card>
-      )}
-
-      <Card style={styles.menuCard}>
-        {menuItems.map((item, index) => (
-          <Pressable
-            key={index}
-            style={({ pressed }) => [
-              styles.menuItem,
-              index < menuItems.length - 1 && styles.menuItemBorder,
-              pressed && styles.menuItemPressed,
-            ]}
-            onPress={item.onPress}
-          >
-            <View style={styles.menuItemContent}>
-              <View style={styles.menuIconContainer}>{item.icon}</View>
-              <Text
-                style={[
-                  styles.menuItemText,
-                  item.textColor ? { color: item.textColor } : null,
-                ]}
+          <View style={styles.profileHeaderContent}>
+            {/* Enhanced Avatar Section */}
+            <View style={styles.avatarSection}>
+              <Pressable
+                style={styles.avatarContainer}
+                onPress={handlePresentModalPress}
               >
-                {item.title}
+                {isUpdating && (
+                  <View style={styles.avatarOverlay}>
+                    <ActivityIndicator size="large" color={Colors.white} />
+                  </View>
+                )}
+                <Image
+                  key={profile?.avatar_url}
+                  source={{
+                    uri:
+                      profile?.avatar_url ||
+                      'https://images.pexels.com/photos/614810/pexels-photo-614810.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+                  }}
+                  style={styles.avatar}
+                />
+                <View style={styles.avatarRing} />
+              </Pressable>
+
+              {/* Premium Badge */}
+              {profile?.is_premium && (
+                <View style={styles.premiumBadge}>
+                  <Star size={12} color={Colors.white} />
+                  <Text style={styles.premiumBadgeText}>PRO</Text>
+                </View>
+              )}
+            </View>
+
+            {/* Enhanced Profile Info */}
+            <View style={styles.profileInfo}>
+              {isEditingName ? (
+                <View style={styles.editNameContainer}>
+                  <TextInput
+                    value={name}
+                    onChangeText={setName}
+                    style={styles.nameInput}
+                    autoFocus
+                    placeholder="Enter your name"
+                    placeholderTextColor={EnhancedColors.glass}
+                  />
+                  <Pressable
+                    style={styles.saveButton}
+                    onPress={handleNameUpdate}
+                    disabled={isUpdating}
+                  >
+                    {isUpdating ? (
+                      <ActivityIndicator size="small" color={Colors.white} />
+                    ) : (
+                      <Check size={18} color={Colors.white} />
+                    )}
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable
+                  onPress={() => setIsEditingName(true)}
+                  style={styles.nameContainer}
+                >
+                  <Text style={styles.profileName} numberOfLines={1}>
+                    {profile?.name || 'Anonymous User'}
+                  </Text>
+                </Pressable>
+              )}
+
+              <Text style={styles.profileEmail}>{profile?.email}</Text>
+
+              {/* Join Date */}
+              <View style={styles.joinDateContainer}>
+                <Calendar size={14} color={Colors.gray[300]} />
+                <Text style={styles.joinDate}>
+                  Member since {new Date().getFullYear()}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Enhanced Stats Cards */}
+          <View style={styles.statsContainer}>
+            {achievements.map((stat, index) => (
+              <View
+                key={index}
+                style={[styles.statCard, { backgroundColor: stat.color }]}
+              >
+                <View style={styles.statIconContainer}>
+                  <BookOpen size={14} color={Colors.white} />
+                </View>
+                <Text style={styles.statValue}>{stat.value}</Text>
+                <Text style={styles.statLabel} numberOfLines={1}>
+                  {stat.label}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.mainContent}>
+          {/* Enhanced Premium Banner */}
+          {!profile?.is_premium && (
+            <Pressable style={styles.premiumBanner}>
+              <View style={styles.premiumGradient} />
+              <View style={styles.premiumContent}>
+                <View style={styles.premiumIcon}>
+                  <Sparkles size={28} color={Colors.white} />
+                </View>
+                <View style={styles.premiumTextContainer}>
+                  <Text style={styles.premiumTitle}>Upgrade to Premium</Text>
+                  <Text style={styles.premiumDesc}>
+                    Unlock unlimited books, advanced voices & more
+                  </Text>
+                </View>
+                <ChevronRight size={24} color={Colors.white} />
+              </View>
+            </Pressable>
+          )}
+
+          <View style={styles.menuContainer}>
+            {menuItems.map((item, index) => (
+              <Pressable
+                key={index}
+                style={({ pressed }) => [
+                  styles.menuItem,
+                  pressed && styles.menuItemPressed,
+                  index === menuItems.length - 1 && styles.lastMenuItem,
+                ]}
+                onPress={item.onPress}
+              >
+                <View
+                  style={[
+                    styles.menuIconContainer,
+                    { backgroundColor: `${item.color}15` },
+                  ]}
+                >
+                  {item.icon}
+                </View>
+                <View style={styles.menuTextContainer}>
+                  <Text style={styles.menuItemText}>{item.title}</Text>
+                  <Text style={styles.menuItemSubtitle}>{item.subtitle}</Text>
+                </View>
+                <ChevronRight size={20} color={Colors.gray[400]} />
+              </Pressable>
+            ))}
+          </View>
+
+          {/* Enhanced Sign Out Button */}
+          <Pressable
+            style={styles.signOutButton}
+            onPress={handleSignOut}
+            disabled={isSigningOut}
+          >
+            <View style={styles.signOutContent}>
+              {isSigningOut ? (
+                <ActivityIndicator size="small" color={Colors.error} />
+              ) : (
+                <LogOut size={20} color={Colors.error} />
+              )}
+              <Text style={styles.signOutButtonText}>
+                {isSigningOut ? 'Signing out...' : 'Sign Out'}
               </Text>
             </View>
-            {item.title === 'Sign Out' && isSigningOut ? (
-              <ActivityIndicator size="small" color={Colors.error} />
-            ) : (
-              <ChevronRight size={18} color={Colors.gray[400]} />
-            )}
           </Pressable>
-        ))}
-      </Card>
 
-      {signOutError && (
-        <View style={styles.signOutErrorContainer}>
-          <Text style={styles.errorText}>{signOutError}</Text>
+          {/* App Info */}
+          <View style={styles.appInfo}>
+            <Text style={styles.appVersion}>Yabble v1.0.0</Text>
+            <Text style={styles.appCopyright}>
+              © 2024 Yabble. All rights reserved.
+            </Text>
+          </View>
         </View>
-      )}
-
-      <View style={styles.appInfo}>
-        <Text style={styles.appVersion}>StoryVoice v1.0.0</Text>
-        <View style={styles.linksContainer}>
-          <Text style={styles.link}>Terms of Service</Text>
-          <Text style={styles.linkDivider}>•</Text>
-          <Text style={styles.link}>Privacy Policy</Text>
-        </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+      <BottomSheetModal
+        ref={bottomSheetModalRef}
+        index={0}
+        snapPoints={snapPoints}
+        handleIndicatorStyle={styles.bottomSheetHandle}
+        backgroundStyle={styles.bottomSheetBackground}
+        backdropComponent={renderBackdrop}
+      >
+        <BottomSheetView style={styles.bottomSheetContent}>
+          <Text style={styles.modalTitle}>Change Profile Photo</Text>
+          <Pressable
+            style={({ pressed }) => [
+              styles.modalButton,
+              pressed && styles.modalButtonPressed,
+            ]}
+            onPress={handleAvatarChange}
+          >
+            <ImageIcon
+              size={22}
+              color={EnhancedColors.accent}
+              style={styles.modalButtonIcon}
+            />
+            <Text style={styles.modalButtonText}>Choose from Gallery</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [
+              styles.modalButton,
+              pressed && styles.modalButtonPressed,
+            ]}
+            onPress={handleAvatarRemove}
+          >
+            <Trash2
+              size={22}
+              color={Colors.error}
+              style={styles.modalButtonIcon}
+            />
+            <Text style={[styles.modalButtonText, { color: Colors.error }]}>
+              Remove Photo
+            </Text>
+          </Pressable>
+        </BottomSheetView>
+      </BottomSheetModal>
+    </>
   );
+}
+
+export default function ProfileScreen() {
+  return <ProfileScreenContent />;
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.softCream,
+    backgroundColor: EnhancedColors.surface,
   },
-  content: {
-    padding: Layout.spacing.md,
+  scrollContent: {
     paddingBottom: Layout.spacing.xxl,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.softCream,
+    backgroundColor: EnhancedColors.surface,
   },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: Colors.softCream,
+  loadingText: {
+    marginTop: Layout.spacing.md,
+    fontSize: 16,
+    color: Colors.gray[600],
+    fontWeight: '500',
+  },
+  mainContent: {
     padding: Layout.spacing.lg,
   },
-  errorText: {
-    color: Colors.error,
-    textAlign: 'center',
-    marginBottom: Layout.spacing.md,
-  },
   profileHeader: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Layout.spacing.lg,
+    paddingBottom: Layout.spacing.xl,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  headerGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: Colors.primary,
+    opacity: 0.9,
+  },
+  profileHeaderContent: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: Layout.spacing.lg,
   },
+  avatarSection: {
+    alignItems: 'center',
+    marginRight: Layout.spacing.lg,
+    position: 'relative',
+  },
+  avatarContainer: {
+    position: 'relative',
+  },
   avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    marginRight: Layout.spacing.md,
+    width: 85,
+    height: 85,
+    borderRadius: 42.5,
+    borderWidth: 2,
+    borderColor: Colors.white,
+  },
+  avatarRing: {
+    position: 'absolute',
+    top: -4,
+    left: -4,
+    right: -4,
+    bottom: -4,
+    borderRadius: 46.5,
+    borderWidth: 2,
+    borderColor: EnhancedColors.glass,
+  },
+  avatarOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 42.5,
+  },
+  premiumBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: EnhancedColors.warning,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  premiumBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: Colors.white,
+    marginLeft: 4,
   },
   profileInfo: {
     flex: 1,
+    paddingTop: 8,
+  },
+  nameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  editNameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  nameInput: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: Colors.white,
+    borderBottomWidth: 2,
+    borderColor: Colors.white,
+    paddingVertical: 4,
+    marginRight: Layout.spacing.sm,
+    flex: 1,
   },
   profileName: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: Colors.black,
-    marginBottom: 2,
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: Colors.white,
+    marginRight: Layout.spacing.sm,
   },
   profileEmail: {
-    fontSize: 14,
-    color: Colors.gray[600],
-    marginBottom: Layout.spacing.sm,
+    fontSize: 15,
+    color: Colors.gray[200],
+    marginBottom: 8,
   },
-  profileStats: {
+  joinDateContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  statItem: {
+  joinDate: {
+    fontSize: 13,
+    color: Colors.gray[300],
+    marginLeft: 6,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: Layout.spacing.sm,
+  },
+  statCard: {
+    flex: 1,
     alignItems: 'center',
+    padding: Layout.spacing.sm,
+    marginHorizontal: 3,
+    borderRadius: Layout.borderRadius.md,
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  statIconContainer: {
+    marginBottom: 4,
   },
   statValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.black,
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: Colors.white,
+    marginBottom: 1,
   },
   statLabel: {
-    fontSize: 12,
-    color: Colors.gray[500],
+    fontSize: 9,
+    color: Colors.white,
+    textAlign: 'center',
+    opacity: 0.9,
   },
-  statDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: Colors.gray[300],
-    marginHorizontal: Layout.spacing.md,
+  premiumBanner: {
+    borderRadius: Layout.borderRadius.lg,
+    marginBottom: Layout.spacing.lg,
+    overflow: 'hidden',
+    position: 'relative',
   },
-  premiumCard: {
-    backgroundColor: Colors.lightPeach,
-    marginBottom: Layout.spacing.md,
+  premiumGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: Colors.primary,
   },
   premiumContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    padding: Layout.spacing.md,
   },
-  premiumInfo: {
+  premiumIcon: {
+    marginRight: Layout.spacing.sm,
+    backgroundColor: EnhancedColors.glass,
+    padding: 8,
+    borderRadius: Layout.borderRadius.full,
+  },
+  premiumTextContainer: {
     flex: 1,
-    marginRight: Layout.spacing.md,
   },
   premiumTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    color: Colors.black,
+    fontWeight: 'bold',
+    color: Colors.white,
     marginBottom: 2,
   },
   premiumDesc: {
-    fontSize: 14,
-    color: Colors.black,
+    fontSize: 13,
+    color: Colors.gray[200],
+    marginBottom: 4,
   },
-  upgradeButton: {
-    paddingHorizontal: Layout.spacing.md,
+  premiumFeatures: {
+    flexDirection: 'row',
   },
-  menuCard: {
+  premiumFeature: {
+    fontSize: 11,
+    color: Colors.gray[300],
+    marginRight: Layout.spacing.sm,
+  },
+  sectionHeader: {
     marginBottom: Layout.spacing.lg,
-    padding: 0,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: Colors.gray[800],
+    marginBottom: 4,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: Colors.gray[500],
+  },
+  menuContainer: {
+    backgroundColor: Colors.white,
+    borderRadius: Layout.borderRadius.xl,
+    overflow: 'hidden',
+    shadowColor: EnhancedColors.cardShadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 12,
+    elevation: 8,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: Layout.spacing.md,
-  },
-  menuItemBorder: {
+    padding: Layout.spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.gray[200],
+    borderBottomColor: Colors.gray[100],
+  },
+  lastMenuItem: {
+    borderBottomWidth: 0,
   },
   menuItemPressed: {
-    backgroundColor: Colors.gray[100],
-  },
-  menuItemContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    backgroundColor: Colors.gray[50],
   },
   menuIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.softCream,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: Layout.spacing.md,
   },
+  menuTextContainer: {
+    flex: 1,
+  },
   menuItemText: {
     fontSize: 16,
-    color: Colors.black,
+    color: Colors.gray[800],
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  menuItemSubtitle: {
+    fontSize: 13,
+    color: Colors.gray[500],
+  },
+  signOutButton: {
+    backgroundColor: Colors.white,
+    borderRadius: Layout.borderRadius.lg,
+    marginTop: Layout.spacing.xl,
+    shadowColor: EnhancedColors.cardShadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  signOutContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Layout.spacing.md,
+  },
+  signOutButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.error,
+    marginLeft: Layout.spacing.sm,
   },
   appInfo: {
     alignItems: 'center',
-    marginTop: Layout.spacing.lg,
+    paddingVertical: Layout.spacing.xl,
   },
   appVersion: {
-    fontSize: 14,
-    color: Colors.gray[500],
-    marginBottom: Layout.spacing.sm,
+    fontSize: 13,
+    color: Colors.gray[400],
+    fontWeight: '500',
   },
-  linksContainer: {
+  appCopyright: {
+    fontSize: 11,
+    color: Colors.gray[400],
+    marginTop: 4,
+  },
+  saveButton: {
+    backgroundColor: EnhancedColors.glass,
+    padding: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.white,
+  },
+  // Bottom Sheet Styles
+  bottomSheetBackground: {
+    backgroundColor: EnhancedColors.surface,
+    borderRadius: 24,
+  },
+  bottomSheetHandle: {
+    backgroundColor: EnhancedColors.bottomSheetHandle,
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+  },
+  bottomSheetContent: {
+    padding: Layout.spacing.lg,
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: Colors.gray[800],
+    marginBottom: Layout.spacing.lg,
+  },
+  modalButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: Colors.white,
+    paddingVertical: Layout.spacing.md,
+    paddingHorizontal: Layout.spacing.lg,
+    borderRadius: Layout.borderRadius.lg,
+    width: '100%',
+    marginBottom: Layout.spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.gray[200],
   },
-  link: {
-    fontSize: 14,
-    color: Colors.black,
-    textDecorationLine: 'underline',
+  modalButtonPressed: {
+    backgroundColor: Colors.gray[100],
   },
-  linkDivider: {
-    fontSize: 14,
-    color: Colors.gray[500],
-    marginHorizontal: Layout.spacing.xs,
+  modalButtonIcon: {
+    marginRight: Layout.spacing.md,
   },
-  signOutErrorContainer: {
-    padding: Layout.spacing.md,
-    alignItems: 'center',
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.gray[800],
   },
 });
