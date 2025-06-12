@@ -1,4 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
+} from 'react';
 import {
   StyleSheet,
   Text,
@@ -31,6 +37,8 @@ import {
   Target,
   Calendar,
   Star,
+  Image as ImageIcon,
+  Trash2,
 } from 'lucide-react-native';
 import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
@@ -40,6 +48,11 @@ import { useProfile } from '../../hooks/useProfile';
 import { signOut as supabaseSignOut } from '../../lib/auth';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import {
+  BottomSheetModal,
+  BottomSheetView,
+  BottomSheetBackdrop,
+} from '@gorhom/bottom-sheet';
 
 const { width } = Dimensions.get('window');
 
@@ -52,6 +65,7 @@ const EnhancedColors = {
   info: '#3B82F6', // Blue
   surface: '#F8FAFC', // Light surface
   cardShadow: 'rgba(15, 23, 42, 0.08)',
+  bottomSheetHandle: 'rgba(0, 0, 0, 0.1)',
   gradient: {
     primary: ['#8B5CF6', '#A855F7'],
     secondary: ['#06B6D4', '#0891B2'],
@@ -60,7 +74,7 @@ const EnhancedColors = {
   glass: 'rgba(255, 255, 255, 0.1)',
 };
 
-export default function ProfileScreen() {
+function ProfileScreenContent() {
   const {
     profile,
     isLoading: profileLoading,
@@ -75,6 +89,31 @@ export default function ProfileScreen() {
   const [isEditingName, setIsEditingName] = useState(false);
   const [name, setName] = useState(profile?.name || '');
   const [isUpdating, setIsUpdating] = useState(false);
+
+  // Bottom sheet state
+  const bottomSheetModalRef = useRef<BottomSheetModal>(null);
+  const snapPoints = useMemo(() => ['33%'], []);
+
+  const handlePresentModalPress = useCallback(() => {
+    bottomSheetModalRef.current?.present();
+  }, []);
+
+  const handleCloseModalPress = useCallback(() => {
+    bottomSheetModalRef.current?.dismiss();
+  }, []);
+
+  const renderBackdrop = useCallback(
+    (props: any) => (
+      <BottomSheetBackdrop
+        {...props}
+        disappearsOnIndex={-1}
+        appearsOnIndex={0}
+        pressBehavior="close"
+        opacity={0.5}
+      />
+    ),
+    []
+  );
 
   useEffect(() => {
     if (profile?.name) {
@@ -120,6 +159,7 @@ export default function ProfileScreen() {
   };
 
   const handleAvatarChange = async () => {
+    handleCloseModalPress();
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert(
@@ -130,7 +170,7 @@ export default function ProfileScreen() {
     }
 
     let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
       quality: 1,
@@ -156,6 +196,24 @@ export default function ProfileScreen() {
             setIsUpdating(false);
           }
         }
+      }
+    }
+  };
+
+  const handleAvatarRemove = async () => {
+    handleCloseModalPress();
+    if (profile) {
+      setIsUpdating(true);
+      try {
+        await updateProfile({
+          ...profile,
+          avatar_url: null,
+          avatarFile: undefined,
+        });
+      } catch (error) {
+        Alert.alert('Remove Error', 'Failed to remove your avatar.');
+      } finally {
+        setIsUpdating(false);
       }
     }
   };
@@ -228,202 +286,238 @@ export default function ProfileScreen() {
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.scrollContent}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Enhanced Header with Gradient */}
-      <View style={[styles.profileHeader, { paddingTop: insets.top + 20 }]}>
-        <View style={styles.headerGradient} />
+    <>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Enhanced Header with Gradient */}
+        <View style={[styles.profileHeader, { paddingTop: insets.top + 20 }]}>
+          <View style={styles.headerGradient} />
 
-        <View style={styles.profileHeaderContent}>
-          {/* Enhanced Avatar Section */}
-          <View style={styles.avatarSection}>
-            <Pressable
-              style={styles.avatarContainer}
-              onPress={handleAvatarChange}
-            >
-              {isUpdating && (
-                <View style={styles.avatarOverlay}>
-                  <ActivityIndicator size="large" color={Colors.white} />
+          <View style={styles.profileHeaderContent}>
+            {/* Enhanced Avatar Section */}
+            <View style={styles.avatarSection}>
+              <Pressable
+                style={styles.avatarContainer}
+                onPress={handlePresentModalPress}
+              >
+                {isUpdating && (
+                  <View style={styles.avatarOverlay}>
+                    <ActivityIndicator size="large" color={Colors.white} />
+                  </View>
+                )}
+                <Image
+                  key={profile?.avatar_url}
+                  source={{
+                    uri:
+                      profile?.avatar_url ||
+                      'https://images.pexels.com/photos/614810/pexels-photo-614810.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+                  }}
+                  style={styles.avatar}
+                />
+                <View style={styles.avatarRing} />
+              </Pressable>
+
+              {/* Premium Badge */}
+              {profile?.is_premium && (
+                <View style={styles.premiumBadge}>
+                  <Star size={12} color={Colors.white} />
+                  <Text style={styles.premiumBadgeText}>PRO</Text>
                 </View>
               )}
-              <Image
-                key={profile?.avatar_url}
-                source={{
-                  uri:
-                    profile?.avatar_url ||
-                    'https://images.pexels.com/photos/614810/pexels-photo-614810.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-                }}
-                style={styles.avatar}
-              />
-              <View style={styles.avatarRing} />
-            </Pressable>
-
-            {/* Premium Badge */}
-            {profile?.is_premium && (
-              <View style={styles.premiumBadge}>
-                <Star size={12} color={Colors.white} />
-                <Text style={styles.premiumBadgeText}>PRO</Text>
-              </View>
-            )}
-          </View>
-
-          {/* Enhanced Profile Info */}
-          <View style={styles.profileInfo}>
-            {isEditingName ? (
-              <View style={styles.editNameContainer}>
-                <TextInput
-                  value={name}
-                  onChangeText={setName}
-                  style={styles.nameInput}
-                  autoFocus
-                  placeholder="Enter your name"
-                  placeholderTextColor={EnhancedColors.glass}
-                />
-                <Pressable
-                  style={styles.saveButton}
-                  onPress={handleNameUpdate}
-                  disabled={isUpdating}
-                >
-                  {isUpdating ? (
-                    <ActivityIndicator size="small" color={Colors.white} />
-                  ) : (
-                    <Check size={18} color={Colors.white} />
-                  )}
-                </Pressable>
-              </View>
-            ) : (
-              <Pressable
-                onPress={() => setIsEditingName(true)}
-                style={styles.nameContainer}
-              >
-                <Text style={styles.profileName} numberOfLines={1}>
-                  {profile?.name || 'Anonymous User'}
-                </Text>
-              </Pressable>
-            )}
-
-            <Text style={styles.profileEmail}>{profile?.email}</Text>
-
-            {/* Join Date */}
-            <View style={styles.joinDateContainer}>
-              <Calendar size={14} color={Colors.gray[300]} />
-              <Text style={styles.joinDate}>
-                Member since {new Date().getFullYear()}
-              </Text>
             </View>
-          </View>
-        </View>
 
-        {/* Enhanced Stats Cards */}
-        <View style={styles.statsContainer}>
-          {achievements.map((stat, index) => (
-            <View
-              key={index}
-              style={[styles.statCard, { backgroundColor: stat.color }]}
-            >
-              <View style={styles.statIconContainer}>
-                <BookOpen size={14} color={Colors.white} />
-              </View>
-              <Text style={styles.statValue}>{stat.value}</Text>
-              <Text style={styles.statLabel} numberOfLines={1}>
-                {stat.label}
-              </Text>
-            </View>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.mainContent}>
-        {/* Enhanced Premium Banner */}
-        {!profile?.is_premium && (
-          <Pressable style={styles.premiumBanner}>
-            <View style={styles.premiumGradient} />
-            <View style={styles.premiumContent}>
-              <View style={styles.premiumIcon}>
-                <Sparkles size={28} color={Colors.white} />
-              </View>
-              <View style={styles.premiumTextContainer}>
-                <Text style={styles.premiumTitle}>Upgrade to Premium</Text>
-                <Text style={styles.premiumDesc}>
-                  Unlock unlimited books, advanced features & more
-                </Text>
-                <View style={styles.premiumFeatures}>
-                  <Text style={styles.premiumFeature}>• Unlimited Books</Text>
-                  <Text style={styles.premiumFeature}>• Priority Support</Text>
+            {/* Enhanced Profile Info */}
+            <View style={styles.profileInfo}>
+              {isEditingName ? (
+                <View style={styles.editNameContainer}>
+                  <TextInput
+                    value={name}
+                    onChangeText={setName}
+                    style={styles.nameInput}
+                    autoFocus
+                    placeholder="Enter your name"
+                    placeholderTextColor={EnhancedColors.glass}
+                  />
+                  <Pressable
+                    style={styles.saveButton}
+                    onPress={handleNameUpdate}
+                    disabled={isUpdating}
+                  >
+                    {isUpdating ? (
+                      <ActivityIndicator size="small" color={Colors.white} />
+                    ) : (
+                      <Check size={18} color={Colors.white} />
+                    )}
+                  </Pressable>
                 </View>
+              ) : (
+                <Pressable
+                  onPress={() => setIsEditingName(true)}
+                  style={styles.nameContainer}
+                >
+                  <Text style={styles.profileName} numberOfLines={1}>
+                    {profile?.name || 'Anonymous User'}
+                  </Text>
+                </Pressable>
+              )}
+
+              <Text style={styles.profileEmail}>{profile?.email}</Text>
+
+              {/* Join Date */}
+              <View style={styles.joinDateContainer}>
+                <Calendar size={14} color={Colors.gray[300]} />
+                <Text style={styles.joinDate}>
+                  Member since {new Date().getFullYear()}
+                </Text>
               </View>
-              <ChevronRight size={24} color={Colors.white} />
+            </View>
+          </View>
+
+          {/* Enhanced Stats Cards */}
+          <View style={styles.statsContainer}>
+            {achievements.map((stat, index) => (
+              <View
+                key={index}
+                style={[styles.statCard, { backgroundColor: stat.color }]}
+              >
+                <View style={styles.statIconContainer}>
+                  <BookOpen size={14} color={Colors.white} />
+                </View>
+                <Text style={styles.statValue}>{stat.value}</Text>
+                <Text style={styles.statLabel} numberOfLines={1}>
+                  {stat.label}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.mainContent}>
+          {/* Enhanced Premium Banner */}
+          {!profile?.is_premium && (
+            <Pressable style={styles.premiumBanner}>
+              <View style={styles.premiumGradient} />
+              <View style={styles.premiumContent}>
+                <View style={styles.premiumIcon}>
+                  <Sparkles size={28} color={Colors.white} />
+                </View>
+                <View style={styles.premiumTextContainer}>
+                  <Text style={styles.premiumTitle}>Upgrade to Premium</Text>
+                  <Text style={styles.premiumDesc}>
+                    Unlock unlimited books, advanced voices & more
+                  </Text>
+                </View>
+                <ChevronRight size={24} color={Colors.white} />
+              </View>
+            </Pressable>
+          )}
+
+          <View style={styles.menuContainer}>
+            {menuItems.map((item, index) => (
+              <Pressable
+                key={index}
+                style={({ pressed }) => [
+                  styles.menuItem,
+                  pressed && styles.menuItemPressed,
+                  index === menuItems.length - 1 && styles.lastMenuItem,
+                ]}
+                onPress={item.onPress}
+              >
+                <View
+                  style={[
+                    styles.menuIconContainer,
+                    { backgroundColor: `${item.color}15` },
+                  ]}
+                >
+                  {item.icon}
+                </View>
+                <View style={styles.menuTextContainer}>
+                  <Text style={styles.menuItemText}>{item.title}</Text>
+                  <Text style={styles.menuItemSubtitle}>{item.subtitle}</Text>
+                </View>
+                <ChevronRight size={20} color={Colors.gray[400]} />
+              </Pressable>
+            ))}
+          </View>
+
+          {/* Enhanced Sign Out Button */}
+          <Pressable
+            style={styles.signOutButton}
+            onPress={handleSignOut}
+            disabled={isSigningOut}
+          >
+            <View style={styles.signOutContent}>
+              {isSigningOut ? (
+                <ActivityIndicator size="small" color={Colors.error} />
+              ) : (
+                <LogOut size={20} color={Colors.error} />
+              )}
+              <Text style={styles.signOutButtonText}>
+                {isSigningOut ? 'Signing out...' : 'Sign Out'}
+              </Text>
             </View>
           </Pressable>
-        )}
 
-        {/* Enhanced Menu Section */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Account Settings</Text>
-          <Text style={styles.sectionSubtitle}>
-            Manage your account preferences
-          </Text>
-        </View>
-
-        <View style={styles.menuContainer}>
-          {menuItems.map((item, index) => (
-            <Pressable
-              key={index}
-              style={({ pressed }) => [
-                styles.menuItem,
-                pressed && styles.menuItemPressed,
-                index === menuItems.length - 1 && styles.lastMenuItem,
-              ]}
-              onPress={item.onPress}
-            >
-              <View
-                style={[
-                  styles.menuIconContainer,
-                  { backgroundColor: `${item.color}15` },
-                ]}
-              >
-                {item.icon}
-              </View>
-              <View style={styles.menuTextContainer}>
-                <Text style={styles.menuItemText}>{item.title}</Text>
-                <Text style={styles.menuItemSubtitle}>{item.subtitle}</Text>
-              </View>
-              <ChevronRight size={20} color={Colors.gray[400]} />
-            </Pressable>
-          ))}
-        </View>
-
-        {/* Enhanced Sign Out Button */}
-        <Pressable
-          style={styles.signOutButton}
-          onPress={handleSignOut}
-          disabled={isSigningOut}
-        >
-          <View style={styles.signOutContent}>
-            {isSigningOut ? (
-              <ActivityIndicator size="small" color={Colors.error} />
-            ) : (
-              <LogOut size={20} color={Colors.error} />
-            )}
-            <Text style={styles.signOutButtonText}>
-              {isSigningOut ? 'Signing out...' : 'Sign Out'}
+          {/* App Info */}
+          <View style={styles.appInfo}>
+            <Text style={styles.appVersion}>Yabble v1.0.0</Text>
+            <Text style={styles.appCopyright}>
+              © 2024 Yabble. All rights reserved.
             </Text>
           </View>
-        </Pressable>
-
-        {/* App Info */}
-        <View style={styles.appInfo}>
-          <Text style={styles.appVersion}>Yabble v1.0.0</Text>
-          <Text style={styles.appCopyright}>
-            © 2024 Yabble. All rights reserved.
-          </Text>
         </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+      <BottomSheetModal
+        ref={bottomSheetModalRef}
+        index={0}
+        snapPoints={snapPoints}
+        handleIndicatorStyle={styles.bottomSheetHandle}
+        backgroundStyle={styles.bottomSheetBackground}
+        backdropComponent={renderBackdrop}
+      >
+        <BottomSheetView style={styles.bottomSheetContent}>
+          <Text style={styles.modalTitle}>Change Profile Photo</Text>
+          <Pressable
+            style={({ pressed }) => [
+              styles.modalButton,
+              pressed && styles.modalButtonPressed,
+            ]}
+            onPress={handleAvatarChange}
+          >
+            <ImageIcon
+              size={22}
+              color={EnhancedColors.accent}
+              style={styles.modalButtonIcon}
+            />
+            <Text style={styles.modalButtonText}>Choose from Gallery</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [
+              styles.modalButton,
+              pressed && styles.modalButtonPressed,
+            ]}
+            onPress={handleAvatarRemove}
+          >
+            <Trash2
+              size={22}
+              color={Colors.error}
+              style={styles.modalButtonIcon}
+            />
+            <Text style={[styles.modalButtonText, { color: Colors.error }]}>
+              Remove Photo
+            </Text>
+          </Pressable>
+        </BottomSheetView>
+      </BottomSheetModal>
+    </>
   );
+}
+
+export default function ProfileScreen() {
+  return <ProfileScreenContent />;
 }
 
 const styles = StyleSheet.create({
@@ -482,7 +576,7 @@ const styles = StyleSheet.create({
     width: 85,
     height: 85,
     borderRadius: 42.5,
-    borderWidth: 4,
+    borderWidth: 2,
     borderColor: Colors.white,
   },
   avatarRing: {
@@ -739,5 +833,49 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: Colors.white,
+  },
+  // Bottom Sheet Styles
+  bottomSheetBackground: {
+    backgroundColor: EnhancedColors.surface,
+    borderRadius: 24,
+  },
+  bottomSheetHandle: {
+    backgroundColor: EnhancedColors.bottomSheetHandle,
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+  },
+  bottomSheetContent: {
+    padding: Layout.spacing.lg,
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: Colors.gray[800],
+    marginBottom: Layout.spacing.lg,
+  },
+  modalButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+    paddingVertical: Layout.spacing.md,
+    paddingHorizontal: Layout.spacing.lg,
+    borderRadius: Layout.borderRadius.lg,
+    width: '100%',
+    marginBottom: Layout.spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.gray[200],
+  },
+  modalButtonPressed: {
+    backgroundColor: Colors.gray[100],
+  },
+  modalButtonIcon: {
+    marginRight: Layout.spacing.md,
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.gray[800],
   },
 });
