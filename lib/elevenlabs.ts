@@ -35,6 +35,7 @@ export const elevenlabsApi = {
       headers: {
         'xi-api-key': ELEVENLABS_API_KEY,
         'Content-Type': 'application/json',
+        Accept: 'audio/mpeg', // Explicitly request MP3 format
       },
       body: JSON.stringify({
         text,
@@ -44,6 +45,7 @@ export const elevenlabsApi = {
           similarity_boost: 0.75,
           ...options,
         },
+        output_format: 'mp3_44100_128', // High quality MP3 format compatible with iOS
       }),
     });
 

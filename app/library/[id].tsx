@@ -1,54 +1,56 @@
 import React, { useState, useEffect } from 'react';
-import {
-  StyleSheet,
-  Text,
-  View,
-  ScrollView,
-  Image,
-  Pressable,
-} from 'react-native';
+import { StyleSheet, Text, View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import {
-  ChevronLeft,
-  Share2,
-  Download,
-  CreditCard as Edit,
-  Clock,
-  CalendarDays,
-  Headphones,
-  Play,
-  Pause,
-} from 'lucide-react-native';
+import { ChevronLeft, Share2, Play, Pause, Bookmark, RotateCw, RotateCcw } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Audio } from 'expo-av';
+import Slider from '@react-native-community/slider';
 import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
-import Button from '../../components/ui/Button';
-import Card from '../../components/ui/Card';
-import Player from '../../components/audiobook/Player';
 import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../lib/supabase';
-import { audioEffects } from '../../lib/audio';
-import { mockAudioEffects } from '../../utils/mockData';
 import type { Tables } from '../../lib/database';
+import HighlightedText from '../../components/audiobook/HighlightedText';
 
-export default function AudiobookDetailsScreen() {
+// Helper to format time from ms to mm:ss
+const formatTime = (millis: number) => {
+  if (!millis) return '0:00';
+  const minutes = Math.floor(millis / 60000);
+  const seconds = ((millis % 60000) / 1000).toFixed(0);
+  return `${minutes}:${parseInt(seconds) < 10 ? '0' : ''}${seconds}`;
+};
+
+export default function AudiobookPlayerScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
   const { session } = useAuth();
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [audiobook, setAudiobook] = useState<
-    Tables['audiobooks']['Row'] | null
-  >(null);
+
+  // Audiobook data
+  const [audiobook, setAudiobook] = useState<Tables['audiobooks']['Row'] | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Player state
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [position, setPosition] = useState(0);
+  const [isSeeking, setIsSeeking] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1.0);
+
+  const PLAYBACK_RATES = [0.5, 0.75, 1, 1.5, 2];
+
+  // Fetch audiobook data
   useEffect(() => {
     async function fetchAudiobook() {
-      if (!session?.user?.id || !id) return;
-
+      if (!session?.user?.id || !id) {
+        setLoading(false);
+        return;
+      }
       try {
         const { data, error } = await db
           .from('audiobooks')
           .select('*')
-          .eq('id', id)
+          .eq('id', id as string)
           .eq('user_id', session.user.id)
           .single();
 
@@ -64,428 +66,296 @@ export default function AudiobookDetailsScreen() {
     fetchAudiobook();
   }, [id, session?.user?.id]);
 
-  const getBackgroundEffect = () => {
-    if (!audiobook) return null;
-    try {
-      const parsedContent = JSON.parse(audiobook.text_content);
-      return parsedContent.backgroundEffect;
-    } catch {
-      return null;
+  // Sound lifecycle management
+  useEffect(() => {
+    const loadSound = async () => {
+      if (audiobook?.audio_url) {
+        try {
+          await Audio.setAudioModeAsync({
+            allowsRecordingIOS: false,
+            playsInSilentModeIOS: true,
+          });
+
+          const { sound: newSound } = await Audio.Sound.createAsync(
+            { uri: audiobook.audio_url },
+            { shouldPlay: false },
+            onPlaybackStatusUpdate
+          );
+          setSound(newSound);
+        } catch (error) {
+          console.error('Error loading sound', error);
+        }
+      }
+    };
+
+    loadSound();
+
+    return () => {
+      sound?.unloadAsync();
+    };
+  }, [audiobook?.audio_url]);
+
+  // Playback status update handler
+  const onPlaybackStatusUpdate = (status: any) => {
+    if (status.isLoaded) {
+      if (!isSeeking) {
+        setPosition(status.positionMillis);
+      }
+      setDuration(status.durationMillis || 0);
+      setIsPlaying(status.isPlaying);
     }
   };
 
+  // User actions
+  const handlePlayPause = async () => {
+    if (!sound) return;
+    isPlaying ? await sound.pauseAsync() : await sound.playAsync();
+  };
+
+  const handleSeek = async (value: number) => {
+    if (!sound) return;
+    setIsSeeking(false);
+    await sound.setPositionAsync(value);
+  };
+
+  const handleSlidingStart = () => {
+    if (!sound) return;
+    setIsSeeking(true);
+  };
+
+  const skipBy = async (milliseconds: number) => {
+    if (!sound) return;
+    const newPosition = position + milliseconds;
+    await sound.setPositionAsync(Math.max(0, Math.min(newPosition, duration)));
+  };
+
+  const handleRateChange = async () => {
+    if (!sound) return;
+    const currentIndex = PLAYBACK_RATES.indexOf(playbackRate);
+    const nextIndex = (currentIndex + 1) % PLAYBACK_RATES.length;
+    const newRate = PLAYBACK_RATES[nextIndex];
+    try {
+      await sound.setRateAsync(newRate, true);
+      setPlaybackRate(newRate);
+    } catch (error) {
+      console.error('Failed to set playback rate', error);
+    }
+  };
+
+  // Utility to get text content
   const getOriginalText = () => {
     if (!audiobook) return '';
     try {
-      const parsedContent = JSON.parse(audiobook.text_content);
-      return parsedContent.originalText || audiobook.text_content;
+      const parsedContent = JSON.parse(audiobook.text_content || '{}');
+      return parsedContent.originalText || audiobook.text_content || '';
     } catch {
-      return audiobook.text_content;
+      return audiobook.text_content || '';
     }
   };
 
-  const getBackgroundEffectName = () => {
-    const backgroundEffectId = getBackgroundEffect();
-    if (!backgroundEffectId) return 'None';
-
-    const effect = mockAudioEffects.find((e) => e.id === backgroundEffectId);
-    return effect ? effect.name : 'Custom Effect';
-  };
-
+  // Render logic
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <Text>Loading...</Text>
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color={Colors.primary} />
       </View>
     );
   }
 
   if (!audiobook) {
     return (
-      <View style={styles.notFoundContainer}>
-        <Text style={styles.notFoundText}>Audiobook not found</Text>
-        <Button title="Go back" onPress={() => router.back()} />
-      </View>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centered}>
+          <Text style={styles.notFoundText}>Audiobook not found</Text>
+          <Pressable onPress={() => router.back()}>
+            <Text>Go Back</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
     );
   }
 
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  };
-
-  const handlePlay = async () => {
-    if (!audiobook.audio_url) return;
-
-    try {
-      if (isPlaying) {
-        // Stop all audio
-        await audioEffects.stopAllAudio();
-        setIsPlaying(false);
-      } else {
-        // Load voice audio
-        await audioEffects.loadVoiceAudio(audiobook.audio_url);
-
-        // Load background effect if available
-        const backgroundEffectId = getBackgroundEffect();
-        if (backgroundEffectId) {
-          const effect = mockAudioEffects.find(
-            (e) => e.id === backgroundEffectId
-          );
-          if (effect?.previewUrl) {
-            await audioEffects.loadBackgroundMusic(effect.previewUrl);
-          }
-        }
-
-        // Play mixed audio (voice controls the duration)
-        await audioEffects.playMixedAudio();
-        setIsPlaying(true);
-
-        // Monitor playback status to update UI when audio ends
-        const checkStatus = async () => {
-          const status = await audioEffects.getPlaybackStatus();
-          if (!status.voiceIsPlaying && !status.backgroundIsPlaying) {
-            setIsPlaying(false);
-            return; // Stop monitoring when audio ends
-          }
-          // Continue monitoring while audio is playing
-          setTimeout(checkStatus, 500); // Check every 500ms
-        };
-
-        setTimeout(checkStatus, 1000); // Start checking after 1 second
-      }
-    } catch (error) {
-      console.error('Error playing audio:', error);
-      setIsPlaying(false);
-    }
-  };
-
   return (
-    <View style={styles.container}>
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.header}>
-          <Pressable style={styles.backButton} onPress={() => router.back()}>
-            <ChevronLeft size={24} color={Colors.black} />
-          </Pressable>
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Pressable style={styles.headerButton} onPress={() => router.back()}>
+          <ChevronLeft size={24} color={Colors.gray[800]} />
+        </Pressable>
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          {audiobook.title}
+        </Text>
+        <Pressable style={styles.headerButton}>
+          <Share2 size={20} color={Colors.gray[800]} />
+        </Pressable>
+      </View>
 
-          <View style={styles.headerActions}>
-            <Pressable style={styles.iconButton}>
-              <Share2 size={20} color={Colors.black} />
-            </Pressable>
+      {/* Text Content */}
+      <HighlightedText
+        text={getOriginalText()}
+        currentPosition={position}
+        duration={duration}
+        isPlaying={isPlaying}
+        fontSize={18}
+        lineHeight={30}
+      />
 
-            <Pressable style={styles.iconButton}>
-              <Download size={20} color={Colors.black} />
-            </Pressable>
-
-            <Pressable style={styles.iconButton}>
-              <Edit size={20} color={Colors.black} />
-            </Pressable>
-          </View>
+      {/* Player */}
+      <View style={styles.playerContainer}>
+        <Slider
+          style={styles.slider}
+          minimumValue={0}
+          maximumValue={duration}
+          value={position}
+          onSlidingStart={handleSlidingStart}
+          onSlidingComplete={handleSeek}
+          minimumTrackTintColor={Colors.primary}
+          maximumTrackTintColor={Colors.gray[300]}
+          thumbTintColor={Colors.primary}
+        />
+        <View style={styles.timeContainer}>
+          <Text style={styles.timeText}>{formatTime(position)}</Text>
+          <Text style={styles.timeText}>{formatTime(duration)}</Text>
         </View>
 
-        <View style={styles.coverContainer}>
-          <Image
-            source={{
-              uri:
-                audiobook.cover_image ||
-                'https://images.pexels.com/photos/1261180/pexels-photo-1261180.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        <View style={styles.controlsContainer}>
+          <Pressable
+            style={styles.controlButton}
+            onPress={() => {
+              /* Handle bookmark */
             }}
-            style={styles.coverImage}
-          />
+          >
+            <Bookmark size={24} color={Colors.gray[600]} />
+          </Pressable>
+          <Pressable style={styles.controlButton} onPress={() => skipBy(-10000)}>
+            <View style={styles.skipButton}>
+              <RotateCcw size={32} color={Colors.gray[600]} />
+              <Text style={styles.skipButtonText}>10</Text>
+            </View>
+          </Pressable>
+          <Pressable style={styles.playButton} onPress={handlePlayPause}>
+            {isPlaying ? <Pause size={32} color={Colors.white} /> : <Play size={32} color={Colors.white} />}
+          </Pressable>
+          <Pressable style={styles.controlButton} onPress={() => skipBy(10000)}>
+            <View style={styles.skipButton}>
+              <RotateCw size={32} color={Colors.gray[600]} />
+              <Text style={styles.skipButtonText}>10</Text>
+            </View>
+          </Pressable>
+          <Pressable style={styles.controlButton} onPress={handleRateChange}>
+            <Text style={styles.rateText}>{playbackRate}x</Text>
+          </Pressable>
         </View>
-
-        <View style={styles.titleContainer}>
-          <Text style={styles.title}>{audiobook.title}</Text>
-
-          <View style={styles.metaContainer}>
-            <View style={styles.metaItem}>
-              <CalendarDays size={16} color={Colors.gray[500]} />
-              <Text style={styles.metaText}>
-                {formatDate(audiobook.created_at)}
-              </Text>
-            </View>
-
-            <View style={styles.statusBadge}>
-              <Text style={styles.statusText}>{audiobook.status}</Text>
-            </View>
-          </View>
-
-          {audiobook.status === 'completed' && audiobook.audio_url && (
-            <Button
-              title={isPlaying ? 'Pause' : 'Play'}
-              onPress={handlePlay}
-              icon={
-                isPlaying ? (
-                  <Pause size={18} color={Colors.white} />
-                ) : (
-                  <Play size={18} color={Colors.white} />
-                )
-              }
-              fullWidth
-              style={styles.playButton}
-            />
-          )}
-        </View>
-
-        <Card style={styles.textPreviewCard}>
-          <Text style={styles.previewTitle}>Text Preview</Text>
-          <Text style={styles.previewText} numberOfLines={10}>
-            {getOriginalText()}
-          </Text>
-          <Button
-            title="Show Full Text"
-            variant="outline"
-            size="sm"
-            onPress={() => {}}
-            style={styles.showMoreButton}
-          />
-        </Card>
-
-        <Card style={styles.detailsCard}>
-          <Text style={styles.detailsTitle}>Voice & Audio</Text>
-
-          <View style={styles.detailItem}>
-            <View style={styles.detailLabel}>
-              <Text style={styles.detailLabelText}>Voice</Text>
-            </View>
-            <Text style={styles.detailValue}>
-              {audiobook.voice_id ? 'Custom Voice' : 'Default Voice'}
-            </Text>
-          </View>
-
-          <View style={styles.detailItem}>
-            <View style={styles.detailLabel}>
-              <Text style={styles.detailLabelText}>Background</Text>
-            </View>
-            <Text style={styles.detailValue}>{getBackgroundEffectName()}</Text>
-          </View>
-
-          <View style={styles.detailItem}>
-            <View style={styles.detailLabel}>
-              <Text style={styles.detailLabelText}>Status</Text>
-            </View>
-            <Text style={[styles.detailValue, { textTransform: 'capitalize' }]}>
-              {audiobook.status}
-            </Text>
-          </View>
-        </Card>
-
-        <View style={styles.actionsContainer}>
-          <Button
-            title="Share"
-            variant="outline"
-            onPress={() => {}}
-            icon={<Share2 size={18} color={Colors.black} />}
-            style={styles.actionButton}
-          />
-
-          <Button
-            title="Edit"
-            variant="outline"
-            onPress={() => {}}
-            icon={<Edit size={18} color={Colors.black} />}
-            style={styles.actionButton}
-          />
-
-          <Button
-            title="Download"
-            variant="outline"
-            onPress={() => {}}
-            icon={<Download size={18} color={Colors.black} />}
-            style={styles.actionButton}
-          />
-        </View>
-      </ScrollView>
-
-      {isPlaying && (
-        <View style={styles.playerContainer}>
-          <Player audiobook={audiobook} />
-        </View>
-      )}
-    </View>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.softCream,
+    backgroundColor: Colors.softBackground,
   },
-  loadingContainer: {
+  centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.softCream,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    padding: Layout.spacing.md,
-    paddingBottom: Layout.spacing.xxl,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Layout.spacing.md,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.white,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: Colors.black,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  headerActions: {
-    flexDirection: 'row',
-  },
-  iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.white,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: Layout.spacing.sm,
-    shadowColor: Colors.black,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  coverContainer: {
-    alignItems: 'center',
-    marginBottom: Layout.spacing.lg,
-  },
-  coverImage: {
-    width: 240,
-    height: 240,
-    borderRadius: Layout.borderRadius.lg,
-  },
-  titleContainer: {
-    marginBottom: Layout.spacing.lg,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: Colors.black,
-    marginBottom: Layout.spacing.sm,
-  },
-  metaContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    marginBottom: Layout.spacing.md,
-  },
-  metaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: Layout.spacing.md,
-    marginBottom: Layout.spacing.xs,
-  },
-  metaText: {
-    fontSize: 14,
-    color: Colors.gray[500],
-    marginLeft: 4,
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    backgroundColor: Colors.lightPeach,
-    borderRadius: Layout.borderRadius.full,
-    marginBottom: Layout.spacing.xs,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: Colors.black,
-    textTransform: 'capitalize',
-  },
-  playButton: {
-    marginTop: Layout.spacing.sm,
-  },
-  textPreviewCard: {
-    marginBottom: Layout.spacing.lg,
-  },
-  previewTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: Colors.black,
-    marginBottom: Layout.spacing.sm,
-  },
-  previewText: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: Colors.black,
-    marginBottom: Layout.spacing.md,
-  },
-  showMoreButton: {
-    alignSelf: 'flex-start',
-  },
-  detailsCard: {
-    marginBottom: Layout.spacing.lg,
-  },
-  detailsTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: Colors.black,
-    marginBottom: Layout.spacing.md,
-  },
-  detailItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: Layout.spacing.sm,
-  },
-  detailLabel: {
-    width: 100,
-  },
-  detailLabelText: {
-    fontSize: 14,
-    color: Colors.gray[500],
-  },
-  detailValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.black,
-  },
-  actionsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: Layout.spacing.lg,
-  },
-  actionButton: {
-    flex: 1,
-    marginHorizontal: Layout.spacing.xs,
-  },
-  playerContainer: {
-    padding: Layout.spacing.md,
-    backgroundColor: Colors.white,
-    borderTopWidth: 1,
-    borderTopColor: Colors.gray[200],
-  },
-  notFoundContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: Layout.spacing.md,
+    backgroundColor: Colors.softBackground,
   },
   notFoundText: {
     fontSize: 18,
     color: Colors.gray[600],
-    marginBottom: Layout.spacing.md,
+    marginBottom: Layout.spacing.lg,
+  },
+  // Header
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: Layout.spacing.lg,
+    paddingVertical: Layout.spacing.md,
+    backgroundColor: Colors.white,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.gray[200],
+  },
+  headerButton: {
+    padding: Layout.spacing.xs,
+  },
+
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.gray[800],
+    flex: 1,
+    textAlign: 'center',
+    marginHorizontal: Layout.spacing.md,
+  },
+
+  // Player
+  playerContainer: {
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: Layout.spacing.lg,
+    paddingTop: Layout.spacing.sm,
+    paddingBottom: Layout.spacing.lg,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -5 },
+    shadowOpacity: 0.1,
+    elevation: 20,
+    borderTopWidth: 1,
+    borderColor: Colors.gray[200],
+  },
+  slider: {
+    width: '100%',
+    height: 40,
+  },
+  timeContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: Layout.spacing.xs,
+  },
+  timeText: {
+    fontSize: 12,
+    color: Colors.gray[600],
+  },
+  controlsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    marginTop: Layout.spacing.md,
+  },
+  controlButton: {
+    padding: Layout.spacing.md,
+  },
+  playButton: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: Colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  skipButton: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  skipButtonText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: Colors.gray[600],
+    position: 'absolute',
+  },
+  rateText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: Colors.gray[600],
+    width: 40,
+    textAlign: 'center',
   },
 });

@@ -1,24 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import {
-  StyleSheet,
-  Text,
-  View,
-  ScrollView,
-  Pressable,
-  Alert,
-  Animated,
-  Dimensions,
-  Vibration,
-} from 'react-native';
+import { StyleSheet, Text, View, ScrollView, Pressable, Alert, Animated, Dimensions, Vibration } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import {
-  ChevronLeft,
-  Mic,
-  Sparkles,
-  Settings,
-  ChevronDown,
-  ChevronUp,
-} from 'lucide-react-native';
+import { ChevronLeft, Mic, Sparkles, Settings, ChevronDown, ChevronUp } from 'lucide-react-native';
 import Slider from '@react-native-community/slider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Colors from '../constants/Colors';
@@ -79,29 +62,30 @@ export default function VoiceScreen() {
       const originalText = (() => {
         try {
           const parsedContent = JSON.parse(decodeURIComponent(text as string));
-          return (
-            parsedContent.originalText || decodeURIComponent(text as string)
-          );
+          return parsedContent.originalText || decodeURIComponent(text as string);
         } catch {
           return decodeURIComponent(text as string);
         }
       })();
 
-      const audioBlob = await elevenlabsApi.textToSpeech(
-        originalText,
-        selectedVoice,
-        {
-          stability,
-          speed,
-          pitch,
-        }
-      );
+      const audioBlob = await elevenlabsApi.textToSpeech(originalText, selectedVoice, {
+        stability,
+        speed,
+        pitch,
+      });
 
-      // Convert blob to base64
+      // Convert blob to base64 with proper MIME type for iOS compatibility
       const reader = new FileReader();
       reader.readAsDataURL(audioBlob);
       reader.onloadend = async () => {
-        const base64Audio = reader.result as string;
+        let base64Audio = reader.result as string;
+
+        // Ensure proper MIME type for iOS compatibility
+        if (!base64Audio.startsWith('data:audio/')) {
+          // If the MIME type is missing or incorrect, fix it
+          const base64Data = base64Audio.split(',')[1];
+          base64Audio = `data:audio/mpeg;base64,${base64Data}`;
+        }
 
         // Update audiobook with voice audio only
         await updateAudiobook(id as string, {
@@ -177,10 +161,7 @@ export default function VoiceScreen() {
 
           {/* Advanced Settings (Collapsible) */}
           <View style={styles.advancedSection}>
-            <Pressable
-              style={styles.advancedToggle}
-              onPress={() => setShowAdvanced(!showAdvanced)}
-            >
+            <Pressable style={styles.advancedToggle} onPress={() => setShowAdvanced(!showAdvanced)}>
               <View style={styles.advancedHeader}>
                 <Settings size={18} color={Colors.gray[600]} />
                 <Text style={styles.advancedTitle}>Advanced Settings</Text>
@@ -194,9 +175,7 @@ export default function VoiceScreen() {
 
             {showAdvanced && (
               <View style={styles.advancedContent}>
-                <Text style={styles.advancedDesc}>
-                  Fine-tune voice parameters for the perfect sound
-                </Text>
+                <Text style={styles.advancedDesc}>Fine-tune voice parameters for the perfect sound</Text>
 
                 {/* Pitch Slider */}
                 <View style={styles.sliderCard}>
@@ -246,9 +225,7 @@ export default function VoiceScreen() {
                 <View style={styles.sliderCard}>
                   <View style={styles.sliderHeader}>
                     <Text style={styles.sliderLabel}>Stability</Text>
-                    <Text style={styles.sliderValue}>
-                      {stability.toFixed(1)}
-                    </Text>
+                    <Text style={styles.sliderValue}>{stability.toFixed(1)}</Text>
                   </View>
                   <Slider
                     value={stability}
@@ -267,9 +244,7 @@ export default function VoiceScreen() {
                 </View>
 
                 <View style={styles.advancedTip}>
-                  <Text style={styles.tipText}>
-                    💡 Tip: Use the preview button above to test your settings
-                  </Text>
+                  <Text style={styles.tipText}>💡 Tip: Use the preview button above to test your settings</Text>
                 </View>
               </View>
             )}
@@ -278,12 +253,7 @@ export default function VoiceScreen() {
 
         {/* Simple Footer */}
         <View style={styles.footer}>
-          <Button
-            title="Back"
-            onPress={handleBack}
-            variant="ghost"
-            style={styles.backFooterButton}
-          />
+          <Button title="Back" onPress={handleBack} variant="ghost" style={styles.backFooterButton} />
           <Button
             title="Generate Audiobook"
             onPress={handleNext}

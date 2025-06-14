@@ -23,6 +23,7 @@
     "@supabase/postgrest-js": "^1.19.4",
     "@supabase/supabase-js": "^2.50.0",
     "assert": "^2.1.0",
+    "base-64": "^1.0.0",
     "browserify-zlib": "^0.2.0",
     "buffer": "^6.0.3",
     "events": "^3.3.0",
