@@ -27,9 +27,7 @@ const getContentType = (name: string) => {
 
 export function useProfile() {
   const { session } = useAuth();
-  const [profile, setProfile] = useState<Tables['profiles']['Row'] | null>(
-    null
-  );
+  const [profile, setProfile] = useState<Tables['profiles']['Row'] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -73,9 +71,7 @@ export function useProfile() {
           throw uploadError;
         }
 
-        const { data: publicUrlData } = supabase.storage
-          .from('avatars')
-          .getPublicUrl(uploadData.path);
+        const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(uploadData.path);
         avatarUrl = publicUrlData.publicUrl;
       }
 
@@ -86,10 +82,7 @@ export function useProfile() {
       };
       delete profileUpdates.avatarFile;
 
-      const { data, error } = await updateUserProfile(
-        session.user.id,
-        profileUpdates
-      );
+      const { data, error } = await updateUserProfile(session.user.id, profileUpdates);
 
       if (error) throw error;
       setProfile(data);
