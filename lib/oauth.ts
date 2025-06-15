@@ -27,65 +27,31 @@ const getSupabaseUrl = () => {
  */
 export async function signInWithGoogle(): Promise<OAuthResult> {
   try {
-    if (Platform.OS === 'web') {
-      // Web implementation using Supabase Auth
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: redirectUri,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          },
+    // For both mobile and web, use the Supabase signInWithOAuth method.
+    // Supabase handles the underlying native flows and redirects correctly.
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: redirectUri, // This is your deep link: yabble://auth
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
         },
-      });
+        // IMPORTANT: Add your client IDs here for mobile
+        iosClientId: '939237185009-ihdc60udhgeose7sq5epksvajd25dsm6.apps.googleusercontent.com',
+        androidClientId: '939237185009-kpduvc4go4u0n373ljmmv9c4vuqegtoa.apps.googleusercontent.com',
+      } as any,
+    });
 
-      if (error) throw error;
-      return { data };
-    } else {
-      // Mobile implementation using WebBrowser
-      const supabaseUrl = getSupabaseUrl();
-      const authUrl = `${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(redirectUri)}`;
+    if (error) throw error;
 
-      // Use WebBrowser for OAuth flow
-      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
-
-      if (result.type === 'success') {
-        const { url } = result;
-
-        // Parse the URL to get tokens
-        let accessToken = '';
-        let refreshToken = '';
-
-        if (url.includes('#')) {
-          const urlParams = new URLSearchParams(url.split('#')[1]);
-          accessToken = urlParams.get('access_token') || '';
-          refreshToken = urlParams.get('refresh_token') || '';
-        } else if (url.includes('?')) {
-          const urlParams = new URLSearchParams(url.split('?')[1]);
-          accessToken = urlParams.get('access_token') || '';
-          refreshToken = urlParams.get('refresh_token') || '';
-        }
-
-        if (accessToken) {
-          const { data, error } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-
-          if (error) throw error;
-          return { data };
-        }
-      }
-
-      if (result.type === 'cancel') {
-        throw new Error('OAuth authentication was cancelled');
-      }
-
-      throw new Error('OAuth authentication failed');
-    }
+    // The Supabase client will handle the session.
+    // The browser will be opened, and after success, it will redirect back to the app.
+    // The AuthCallbackScreen will handle the session persistence.
+    return { data };
   } catch (error) {
     console.error('Google OAuth error:', error);
+    // Let the calling hook handle the alert
     return { error: error as Error };
   }
 }
@@ -95,55 +61,15 @@ export async function signInWithGoogle(): Promise<OAuthResult> {
  */
 export async function signInWithApple(): Promise<OAuthResult> {
   try {
-    if (Platform.OS === 'web') {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'apple',
-        options: {
-          redirectTo: redirectUri,
-        },
-      });
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'apple',
+      options: {
+        redirectTo: redirectUri,
+      },
+    });
 
-      if (error) throw error;
-      return { data };
-    } else {
-      const supabaseUrl = getSupabaseUrl();
-      const authUrl = `${supabaseUrl}/auth/v1/authorize?provider=apple&redirect_to=${encodeURIComponent(redirectUri)}`;
-
-      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
-
-      if (result.type === 'success') {
-        const { url } = result;
-
-        let accessToken = '';
-        let refreshToken = '';
-
-        if (url.includes('#')) {
-          const urlParams = new URLSearchParams(url.split('#')[1]);
-          accessToken = urlParams.get('access_token') || '';
-          refreshToken = urlParams.get('refresh_token') || '';
-        } else if (url.includes('?')) {
-          const urlParams = new URLSearchParams(url.split('?')[1]);
-          accessToken = urlParams.get('access_token') || '';
-          refreshToken = urlParams.get('refresh_token') || '';
-        }
-
-        if (accessToken) {
-          const { data, error } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-
-          if (error) throw error;
-          return { data };
-        }
-      }
-
-      if (result.type === 'cancel') {
-        throw new Error('OAuth authentication was cancelled');
-      }
-
-      throw new Error('OAuth authentication failed');
-    }
+    if (error) throw error;
+    return { data };
   } catch (error) {
     console.error('Apple OAuth error:', error);
     return { error: error as Error };
@@ -155,58 +81,16 @@ export async function signInWithApple(): Promise<OAuthResult> {
  */
 export async function signInWithFacebook(): Promise<OAuthResult> {
   try {
-    if (Platform.OS === 'web') {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'facebook',
-        options: {
-          redirectTo: redirectUri,
-          scopes: 'email',
-        },
-      });
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'facebook',
+      options: {
+        redirectTo: redirectUri,
+        scopes: 'email',
+      },
+    });
 
-      if (error) throw error;
-      return { data };
-    } else {
-      const supabaseUrl = getSupabaseUrl();
-      const authUrl = `${supabaseUrl}/auth/v1/authorize?provider=facebook&redirect_to=${encodeURIComponent(
-        redirectUri
-      )}&scopes=email`;
-
-      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
-
-      if (result.type === 'success') {
-        const { url } = result;
-
-        let accessToken = '';
-        let refreshToken = '';
-
-        if (url.includes('#')) {
-          const urlParams = new URLSearchParams(url.split('#')[1]);
-          accessToken = urlParams.get('access_token') || '';
-          refreshToken = urlParams.get('refresh_token') || '';
-        } else if (url.includes('?')) {
-          const urlParams = new URLSearchParams(url.split('?')[1]);
-          accessToken = urlParams.get('access_token') || '';
-          refreshToken = urlParams.get('refresh_token') || '';
-        }
-
-        if (accessToken) {
-          const { data, error } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-
-          if (error) throw error;
-          return { data };
-        }
-      }
-
-      if (result.type === 'cancel') {
-        throw new Error('OAuth authentication was cancelled');
-      }
-
-      throw new Error('OAuth authentication failed');
-    }
+    if (error) throw error;
+    return { data };
   } catch (error) {
     console.error('Facebook OAuth error:', error);
     return { error: error as Error };

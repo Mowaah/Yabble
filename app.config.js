@@ -36,7 +36,7 @@ export default ({ config }) => {
         foregroundImage: config.android?.adaptiveIcon?.foregroundImage || './assets/images/icon.png',
         backgroundColor: config.android?.adaptiveIcon?.backgroundColor || '#FFFFFF',
       },
-      package: config.android?.package || intendedPackageName, // Set the package name
+      package: 'com.yabble.app', // Set the package name
       permissions: Array.from(
         new Set([...(config.android?.permissions || []), 'READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE'])
       ),
