@@ -1,25 +1,7 @@
 import React, { useState } from 'react';
-import {
-  StyleSheet,
-  Text,
-  View,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-  Pressable,
-  Dimensions,
-} from 'react-native';
+import { StyleSheet, Text, View, ScrollView, Alert, ActivityIndicator, Pressable, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
-import {
-  FileUp,
-  Mic,
-  Link as LinkIcon,
-  Text as TextIcon,
-  Bot,
-  ChevronRight,
-  Play,
-  Plus,
-} from 'lucide-react-native';
+import { FileUp, Mic, Link as LinkIcon, Text as TextIcon, Bot, ChevronRight, Play, Plus } from 'lucide-react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '../../constants/Colors';
@@ -28,11 +10,7 @@ import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import { useCreateAudiobook } from '../../hooks/useCreateAudiobook';
 import { useAuth } from '../../contexts/AuthContext';
-import {
-  processDocument,
-  validateTextForTTS,
-  DocumentProcessingError,
-} from '../../utils/documentProcessor';
+import { processDocument, validateTextForTTS, DocumentProcessingError } from '../../utils/documentProcessor';
 
 const { width } = Dimensions.get('window');
 
@@ -45,11 +23,7 @@ enum InputMethod {
 export default function CreateScreen() {
   const router = useRouter();
   const { session: authSession, isLoading: isAuthLoading } = useAuth();
-  const {
-    create,
-    isLoading: isCreating,
-    error: createError,
-  } = useCreateAudiobook();
+  const { create, isLoading: isCreating, error: createError } = useCreateAudiobook();
   const [inputMethod, setInputMethod] = useState<InputMethod | null>(null);
   const [text, setText] = useState('');
   const [url, setUrl] = useState('');
@@ -89,11 +63,7 @@ export default function CreateScreen() {
 
       const asset = result.assets[0];
       setSelectedFile(asset.name);
-      const extractedText = await processDocument(
-        asset.uri,
-        asset.mimeType,
-        asset.name
-      );
+      const extractedText = await processDocument(asset.uri, asset.mimeType, asset.name);
 
       const validation = validateTextForTTS(extractedText);
       if (!validation.isValid) {
@@ -105,9 +75,7 @@ export default function CreateScreen() {
       setText(extractedText);
     } catch (error: any) {
       const errorMessage =
-        error instanceof DocumentProcessingError
-          ? error.message
-          : 'Could not process the selected file.';
+        error instanceof DocumentProcessingError ? error.message : 'Could not process the selected file.';
       Alert.alert('File Processing Error', errorMessage);
       setSelectedFile(null);
       setInputMethod(null);
@@ -136,10 +104,7 @@ export default function CreateScreen() {
     if (inputMethod === InputMethod.URL) contentToProcess = url;
 
     if (!contentToProcess.trim()) {
-      Alert.alert(
-        'Input Error',
-        `Please provide content for the audiobook via ${inputMethod}.`
-      );
+      Alert.alert('Input Error', `Please provide content for the audiobook via ${inputMethod}.`);
       return;
     }
 
@@ -190,9 +155,7 @@ export default function CreateScreen() {
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>New Audiobook</Text>
-          <Text style={styles.headerSubtitle}>
-            Transform your content into AI speech
-          </Text>
+          <Text style={styles.headerSubtitle}>Transform your content into AI speech</Text>
         </View>
         {!inputMethod ? (
           // Step 1: Choose Method
@@ -205,10 +168,7 @@ export default function CreateScreen() {
             </View>
 
             <View style={styles.optionsGrid}>
-              <Pressable
-                style={styles.optionCard}
-                onPress={() => handleMethodSelect(InputMethod.TEXT)}
-              >
+              <Pressable style={styles.optionCard} onPress={() => handleMethodSelect(InputMethod.TEXT)}>
                 <View style={styles.optionIcon}>
                   <TextIcon size={32} color={Colors.primary} />
                 </View>
@@ -216,11 +176,7 @@ export default function CreateScreen() {
                 <Text style={styles.optionDesc}>Type directly</Text>
               </Pressable>
 
-              <Pressable
-                style={styles.optionCard}
-                onPress={handleFileInput}
-                disabled={isProcessingFile}
-              >
+              <Pressable style={styles.optionCard} onPress={handleFileInput} disabled={isProcessingFile}>
                 <View style={styles.optionIcon}>
                   {isProcessingFile ? (
                     <ActivityIndicator color={Colors.primary} />
@@ -232,19 +188,12 @@ export default function CreateScreen() {
                 <Text style={styles.optionDesc}>Upload document</Text>
               </Pressable>
 
-              <Pressable
-                style={[styles.optionCard, styles.disabledCard]}
-                onPress={handleUrlInput}
-              >
+              <Pressable style={[styles.optionCard, styles.disabledCard]} onPress={handleUrlInput}>
                 <View style={styles.optionIcon}>
                   <LinkIcon size={32} color={Colors.gray[400]} />
                 </View>
-                <Text style={[styles.optionTitle, styles.disabledText]}>
-                  URL
-                </Text>
-                <Text style={[styles.optionDesc, styles.disabledText]}>
-                  Coming soon
-                </Text>
+                <Text style={[styles.optionTitle, styles.disabledText]}>URL</Text>
+                <Text style={[styles.optionDesc, styles.disabledText]}>Coming soon</Text>
               </Pressable>
             </View>
           </View>
@@ -300,20 +249,11 @@ export default function CreateScreen() {
 
               <View style={styles.inputContainer}>
                 <Text style={styles.inputLabel}>Audiobook Title</Text>
-                <Input
-                  placeholder="Give your audiobook a title"
-                  value={title}
-                  onChangeText={setTitle}
-                />
+                <Input placeholder="Give your audiobook a title" value={title} onChangeText={setTitle} />
               </View>
 
               <View style={styles.actionButtons}>
-                <Button
-                  title="Back"
-                  variant="ghost"
-                  onPress={() => setInputMethod(null)}
-                  style={styles.backButton}
-                />
+                <Button title="Back" variant="ghost" onPress={() => setInputMethod(null)} style={styles.backButton} />
                 <Button
                   title="Create"
                   onPress={handleNext}
@@ -329,12 +269,8 @@ export default function CreateScreen() {
         {/* Quick Tips */}
         <View style={styles.tipsSection}>
           <Text style={styles.tipsTitle}>💡 Quick Tips</Text>
-          <Text style={styles.tipItem}>
-            • Use clear punctuation for natural speech
-          </Text>
-          <Text style={styles.tipItem}>
-            • Longer content works better for AI voices
-          </Text>
+          <Text style={styles.tipItem}>• Use clear punctuation for natural speech</Text>
+          <Text style={styles.tipItem}>• Longer content works better for AI voices</Text>
           <Text style={styles.tipItem}>• Check spelling before creating</Text>
         </View>
       </ScrollView>
@@ -419,11 +355,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 2,
     borderColor: Colors.gray[200],
-    shadowColor: Colors.gray[900],
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
   },
   disabledCard: {
     opacity: 0.5,

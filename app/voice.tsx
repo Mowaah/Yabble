@@ -25,6 +25,7 @@ export default function VoiceScreen() {
   const [stability, setStability] = useState(0.7);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [fadeAnim] = useState(new Animated.Value(0));
 
   useEffect(() => {
@@ -48,6 +49,7 @@ export default function VoiceScreen() {
 
     try {
       setIsProcessing(true);
+      setProgress(0);
 
       // Save voice settings
       await saveVoiceSettings({
@@ -68,41 +70,43 @@ export default function VoiceScreen() {
         }
       })();
 
-      const audioBlob = await elevenlabsApi.textToSpeech(originalText, selectedVoice, {
-        stability,
-        speed,
-        pitch,
+      const { audioBase64, alignment } = await elevenlabsApi.textToSpeech(
+        originalText,
+        selectedVoice,
+        {
+          stability,
+          speed,
+          pitch,
+        },
+        setProgress
+      );
+
+      // Create the new text_content structure with word timings
+      const newTextContent = {
+        originalText,
+        alignment, // This contains the word timings
+        backgroundEffect: null,
+      };
+
+      // Construct the data URL directly from the base64 string
+      const audioUrl = `data:audio/mpeg;base64,${audioBase64}`;
+
+      // Update audiobook with voice audio and the new text content
+      await updateAudiobook(id as string, {
+        voice_id: selectedVoice,
+        audio_url: audioUrl,
+        text_content: JSON.stringify(newTextContent) as any, // Save the rich text content
+        status: 'completed',
       });
 
-      // Convert blob to base64 with proper MIME type for iOS compatibility
-      const reader = new FileReader();
-      reader.readAsDataURL(audioBlob);
-      reader.onloadend = async () => {
-        let base64Audio = reader.result as string;
-
-        // Ensure proper MIME type for iOS compatibility
-        if (!base64Audio.startsWith('data:audio/')) {
-          // If the MIME type is missing or incorrect, fix it
-          const base64Data = base64Audio.split(',')[1];
-          base64Audio = `data:audio/mpeg;base64,${base64Data}`;
-        }
-
-        // Update audiobook with voice audio only
-        await updateAudiobook(id as string, {
-          voice_id: selectedVoice,
-          audio_url: base64Audio,
-          status: 'completed',
-        });
-
-        // Navigate to audio effects for background selection
-        router.push({
-          pathname: '/audio',
-          params: {
-            id,
-            voiceAudio: base64Audio,
-          },
-        });
-      };
+      // Navigate to audio effects for background selection
+      router.push({
+        pathname: '/audio',
+        params: {
+          id,
+          voiceAudio: audioUrl,
+        },
+      });
     } catch (error: any) {
       Alert.alert('Error', error.message);
     } finally {
@@ -255,12 +259,12 @@ export default function VoiceScreen() {
         <View style={styles.footer}>
           <Button title="Back" onPress={handleBack} variant="ghost" style={styles.backFooterButton} />
           <Button
-            title="Generate Audiobook"
+            title={isProcessing ? `Generating... ${Math.round(progress)}%` : 'Generate Audiobook'}
             onPress={handleNext}
             style={styles.generateButton}
-            icon={<Sparkles size={18} color={Colors.white} />}
-            loading={isProcessing}
-            disabled={!selectedVoice}
+            icon={isProcessing ? undefined : <Sparkles size={18} color={Colors.white} />}
+            loading={isProcessing && progress < 5}
+            disabled={!selectedVoice || isProcessing}
           />
         </View>
       </Animated.View>

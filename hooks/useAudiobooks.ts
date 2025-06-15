@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getAudiobooks } from '../lib/database';
 import type { Tables } from '../lib/database';
@@ -9,36 +9,38 @@ export function useAudiobooks() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function loadAudiobooks() {
-      if (!session?.user.id) return;
+  const refreshAudiobooks = useCallback(
+    async (options?: { isInitialLoad?: boolean }) => {
+      if (!session?.user.id) {
+        if (options?.isInitialLoad) setIsLoading(false);
+        return;
+      }
+
+      if (options?.isInitialLoad) {
+        setIsLoading(true);
+      }
 
       try {
-        setIsLoading(true);
         const { data, error } = await getAudiobooks(session.user.id);
-        if (error) throw error;
+        if (error) {
+          throw error;
+        }
         setAudiobooks(data || []);
+        setError(null);
       } catch (e: any) {
         setError(e.message);
       } finally {
-        setIsLoading(false);
+        if (options?.isInitialLoad) {
+          setIsLoading(false);
+        }
       }
-    }
+    },
+    [session?.user.id]
+  );
 
-    loadAudiobooks();
-  }, [session?.user.id]);
-
-  const refreshAudiobooks = async () => {
-    if (!session?.user.id) return;
-    
-    try {
-      const { data, error } = await getAudiobooks(session.user.id);
-      if (error) throw error;
-      setAudiobooks(data || []);
-    } catch (e: any) {
-      setError(e.message);
-    }
-  };
+  useEffect(() => {
+    refreshAudiobooks({ isInitialLoad: true });
+  }, [refreshAudiobooks]);
 
   return { audiobooks, isLoading, error, refreshAudiobooks };
 }
