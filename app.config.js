@@ -10,7 +10,7 @@ export default ({ config }) => {
     version: config.version || '1.0.0',
     orientation: config.orientation || 'portrait',
     icon: config.icon || './assets/images/icon.png',
-    scheme: config.scheme || 'myapp',
+    scheme: config.scheme || 'yabble',
     userInterfaceStyle: config.userInterfaceStyle || 'automatic',
     splash: {
       ...(config.splash || {}),
@@ -33,19 +33,12 @@ export default ({ config }) => {
       ...(config.android || {}),
       adaptiveIcon: {
         ...(config.android?.adaptiveIcon || {}),
-        foregroundImage:
-          config.android?.adaptiveIcon?.foregroundImage ||
-          './assets/images/icon.png',
-        backgroundColor:
-          config.android?.adaptiveIcon?.backgroundColor || '#FFFFFF',
+        foregroundImage: config.android?.adaptiveIcon?.foregroundImage || './assets/images/icon.png',
+        backgroundColor: config.android?.adaptiveIcon?.backgroundColor || '#FFFFFF',
       },
       package: config.android?.package || intendedPackageName, // Set the package name
       permissions: Array.from(
-        new Set([
-          ...(config.android?.permissions || []),
-          'READ_EXTERNAL_STORAGE',
-          'WRITE_EXTERNAL_STORAGE',
-        ])
+        new Set([...(config.android?.permissions || []), 'READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE'])
       ),
     },
     web: {
