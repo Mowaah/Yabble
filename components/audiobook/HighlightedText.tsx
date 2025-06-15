@@ -1,5 +1,6 @@
-import React, { useMemo, useRef, useCallback } from 'react';
-import { Text, View, StyleSheet, ScrollView } from 'react-native';
+import React, { useMemo, useRef, useEffect } from 'react';
+import { View, StyleSheet, Text } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
 
@@ -7,165 +8,110 @@ interface HighlightedTextProps {
   text: string;
   currentPosition: number;
   duration: number;
-  isPlaying: boolean;
   fontSize?: number;
   lineHeight?: number;
 }
 
-interface TextSegment {
+// Data structures for our list
+interface Word {
   text: string;
   startTime: number;
   endTime: number;
-  index: number;
-  isWord: boolean;
+}
+interface Line {
+  key: string;
+  words: Word[];
 }
 
 const HighlightedText: React.FC<HighlightedTextProps> = ({
   text,
   currentPosition,
   duration,
-  isPlaying,
   fontSize = 18,
   lineHeight = 30,
 }) => {
-  const scrollViewRef = useRef<ScrollView>(null);
+  const listRef = useRef<FlashList<Line>>(null);
+  const activeLineIndex = useRef<number>(0);
 
-  // Memoize text segments - only recalculate when text or duration changes
-  const textSegments = useMemo(() => {
+  // Memoize the expensive computation of turning a string into structured lines and words.
+  // This now only runs if the text or duration changes.
+  const lines = useMemo<Line[]>(() => {
     if (!text || !duration) return [];
 
-    const segments: TextSegment[] = [];
-    const regex = /(\S+|\s+)/g;
-    let match;
-    let totalChars = 0;
-    let wordIndex = 0;
-    const textLength = text.length;
+    let wordCount = 0;
+    const allWords = text.split(/\s+/).filter(Boolean);
+    const totalWords = allWords.length;
 
-    while ((match = regex.exec(text)) !== null) {
-      const segment = match[0];
-      const isWord = /\S/.test(segment);
-      const segmentLength = segment.length;
-
-      let startTime = 0;
-      let endTime = 0;
-
-      if (isWord) {
-        startTime = (totalChars / textLength) * duration;
-        endTime = ((totalChars + segmentLength) / textLength) * duration;
-      }
-
-      segments.push({
-        text: segment,
-        startTime,
-        endTime,
-        index: isWord ? wordIndex++ : -1,
-        isWord,
-      });
-
-      totalChars += segmentLength;
-    }
-
-    return segments;
+    // Create lines of text, which is better for performance.
+    return text.split('\n').map((lineText, lineIndex) => {
+      const wordsInLine = lineText.split(/\s+/).filter(Boolean);
+      return {
+        key: `line-${lineIndex}`,
+        words: wordsInLine.map((wordText) => {
+          // Estimate start and end time for each word
+          const startTime = (wordCount / totalWords) * duration;
+          const endTime = ((wordCount + 1) / totalWords) * duration;
+          wordCount++;
+          return { text: wordText, startTime, endTime };
+        }),
+      };
+    });
   }, [text, duration]);
 
-  // More precise position updates for better word tracking
-  const throttledPosition = useMemo(() => {
-    // Round to nearest 50ms for better word tracking while still optimizing performance
-    return Math.floor(currentPosition / 50) * 50;
-  }, [currentPosition]);
+  // This effect finds the current active line and smoothly scrolls to it.
+  // It's optimized to not run on every single position change.
+  useEffect(() => {
+    // Only check every ~500ms to avoid performance issues
+    if (Math.round(currentPosition % 500) > 50) return;
 
-  // Find active segment with better handling for short words
-  const activeSegmentIndex = useMemo(() => {
-    if (!isPlaying || textSegments.length === 0) return -1;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (line.words.length === 0) continue;
 
-    let bestMatch = -1;
-    let closestDistance = Infinity;
+      const firstWord = line.words[0];
+      const lastWord = line.words[line.words.length - 1];
 
-    // Find the word that's closest to the current position
-    for (let i = 0; i < textSegments.length; i++) {
-      const segment = textSegments[i];
-      if (!segment.isWord) continue;
-
-      // Check if position is within this word's time range
-      if (throttledPosition >= segment.startTime && throttledPosition < segment.endTime) {
-        return i;
-      }
-
-      // If no exact match, find the closest upcoming word
-      if (segment.startTime > throttledPosition) {
-        const distance = segment.startTime - throttledPosition;
-        if (distance < closestDistance) {
-          closestDistance = distance;
-          bestMatch = i;
+      if (currentPosition >= firstWord.startTime && currentPosition <= lastWord.endTime) {
+        if (i !== activeLineIndex.current) {
+          activeLineIndex.current = i;
+          listRef.current?.scrollToIndex({
+            index: i,
+            animated: true,
+            viewPosition: 0.3, // Keep the line near the top-center
+          });
         }
+        break;
       }
     }
+  }, [currentPosition, lines]);
 
-    // If we're very close to the next word (within 100ms), highlight it
-    return closestDistance < 100 ? bestMatch : -1;
-  }, [throttledPosition, textSegments, isPlaying]);
-
-  // Memoize render function for segments
-  const renderSegment = useCallback(
-    (segment: TextSegment, index: number) => {
-      if (!segment.isWord) {
+  // This component renders a single line, with word-by-word highlighting.
+  const renderLine = ({ item }: { item: Line }) => (
+    <Text style={[styles.textWrapper, { fontSize, lineHeight }]}>
+      {item.words.map((word, index) => {
+        const isActive = currentPosition >= word.startTime && currentPosition < word.endTime;
         return (
-          <Text key={`ws-${index}`} style={{ fontSize }}>
-            {segment.text}
+          <Text key={index} style={[styles.wordSegment, isActive && styles.activeSegment]}>
+            {`${word.text} `}
           </Text>
         );
-      }
-
-      const isActive = index === activeSegmentIndex;
-      const hasPlayed = throttledPosition > segment.endTime;
-
-      return (
-        <Text
-          key={`word-${index}`}
-          style={[
-            styles.wordSegment,
-            { fontSize },
-            isActive && styles.activeSegment,
-            hasPlayed && styles.playedSegment,
-          ]}
-        >
-          {segment.text}
-        </Text>
-      );
-    },
-    [fontSize, activeSegmentIndex, throttledPosition]
+      })}
+    </Text>
   );
-
-  // Fallback for empty segments
-  if (textSegments.length === 0) {
-    return (
-      <ScrollView
-        ref={scrollViewRef}
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        <Text style={[styles.fallbackText, { fontSize, lineHeight }]}>{text}</Text>
-      </ScrollView>
-    );
-  }
 
   return (
-    <ScrollView
-      ref={scrollViewRef}
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-      removeClippedSubviews={true} // Performance optimization
-    >
-      <View style={styles.textContainer}>
-        <Text style={[styles.textWrapper, { fontSize, lineHeight }]}>{textSegments.map(renderSegment)}</Text>
-      </View>
-    </ScrollView>
+    <View style={styles.container}>
+      <FlashList
+        ref={listRef}
+        data={lines}
+        renderItem={renderLine}
+        keyExtractor={(item) => item.key}
+        estimatedItemSize={lineHeight * 2} // Help FlashList optimize rendering
+        contentContainerStyle={styles.content}
+      />
+    </View>
   );
 };
-
-HighlightedText.displayName = 'HighlightedText';
 
 const styles = StyleSheet.create({
   container: {
@@ -173,31 +119,19 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: Layout.spacing.lg,
-    paddingBottom: Layout.spacing.xl,
-  },
-  textContainer: {
-    flex: 1,
   },
   textWrapper: {
     color: Colors.gray[700],
+    marginBottom: Layout.spacing.sm, // Space between paragraphs
   },
   wordSegment: {
     color: Colors.gray[700],
   },
   activeSegment: {
-    color: '#8B5CF6', // Direct purple color to ensure it's applied
-    fontWeight: '900',
-    backgroundColor: 'rgba(139, 92, 246, 0.1)', // Light purple background
-    paddingHorizontal: 2,
-    borderRadius: 3,
-  },
-  playedSegment: {
-    color: Colors.gray[500],
-    opacity: 0.8,
-  },
-  fallbackText: {
-    color: Colors.gray[800],
+    color: Colors.primary,
+    backgroundColor: 'rgba(139, 92, 246, 0.15)',
+    borderRadius: 4,
   },
 });
 
-export default HighlightedText;
+export default React.memo(HighlightedText);

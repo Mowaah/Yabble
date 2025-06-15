@@ -25,6 +25,7 @@ export default function VoiceScreen() {
   const [stability, setStability] = useState(0.7);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [fadeAnim] = useState(new Animated.Value(0));
 
   useEffect(() => {
@@ -48,6 +49,7 @@ export default function VoiceScreen() {
 
     try {
       setIsProcessing(true);
+      setProgress(0);
 
       // Save voice settings
       await saveVoiceSettings({
@@ -68,11 +70,16 @@ export default function VoiceScreen() {
         }
       })();
 
-      const audioBlob = await elevenlabsApi.textToSpeech(originalText, selectedVoice, {
-        stability,
-        speed,
-        pitch,
-      });
+      const audioBlob = await elevenlabsApi.textToSpeech(
+        originalText,
+        selectedVoice,
+        {
+          stability,
+          speed,
+          pitch,
+        },
+        setProgress
+      );
 
       // Convert blob to base64 with proper MIME type for iOS compatibility
       const reader = new FileReader();
@@ -255,12 +262,12 @@ export default function VoiceScreen() {
         <View style={styles.footer}>
           <Button title="Back" onPress={handleBack} variant="ghost" style={styles.backFooterButton} />
           <Button
-            title="Generate Audiobook"
+            title={isProcessing ? `Generating... ${Math.round(progress)}%` : 'Generate Audiobook'}
             onPress={handleNext}
             style={styles.generateButton}
-            icon={<Sparkles size={18} color={Colors.white} />}
-            loading={isProcessing}
-            disabled={!selectedVoice}
+            icon={isProcessing ? undefined : <Sparkles size={18} color={Colors.white} />}
+            loading={isProcessing && progress < 5}
+            disabled={!selectedVoice || isProcessing}
           />
         </View>
       </Animated.View>

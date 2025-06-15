@@ -1,16 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, Text, View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ChevronLeft, Share2, Play, Pause, Bookmark, RotateCw, RotateCcw } from 'lucide-react-native';
+import { ChevronLeft, Share2, Play, Pause, Bookmark, RotateCw, RotateCcw, Rewind } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Audio } from 'expo-av';
+import { Audio, AVPlaybackStatus } from 'expo-av';
 import Slider from '@react-native-community/slider';
 import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
 import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../lib/supabase';
+import { updateAudiobook } from '../../lib/database';
 import type { Tables } from '../../lib/database';
 import HighlightedText from '../../components/audiobook/HighlightedText';
+import PlayerSkeleton from '../../components/audiobook/PlayerSkeleton';
 
 // Helper to format time from ms to mm:ss
 const formatTime = (millis: number) => {
@@ -34,8 +36,11 @@ export default function AudiobookPlayerScreen() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [position, setPosition] = useState(0);
+  const [isPlayerLoading, setIsPlayerLoading] = useState(false);
   const [isSeeking, setIsSeeking] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1.0);
+  const [playbackStatus, setPlaybackStatus] = useState<AVPlaybackStatus | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
 
   const PLAYBACK_RATES = [0.5, 0.75, 1, 1.5, 2];
 
@@ -96,13 +101,14 @@ export default function AudiobookPlayerScreen() {
   }, [audiobook?.audio_url]);
 
   // Playback status update handler
-  const onPlaybackStatusUpdate = (status: any) => {
+  const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
     if (status.isLoaded) {
       if (!isSeeking) {
         setPosition(status.positionMillis);
       }
       setDuration(status.durationMillis || 0);
       setIsPlaying(status.isPlaying);
+      setIsPlayerLoading(status.isBuffering);
     }
   };
 
@@ -142,6 +148,27 @@ export default function AudiobookPlayerScreen() {
     }
   };
 
+  const handleBookmark = async () => {
+    if (!audiobook?.id) return;
+
+    const newBookmarkedState = !audiobook.bookmarked;
+
+    setAudiobook({
+      ...audiobook,
+      bookmarked: newBookmarkedState,
+    });
+
+    try {
+      await updateAudiobook(audiobook.id, { bookmarked: newBookmarkedState });
+    } catch (error) {
+      console.error('Failed to sync bookmark status:', error);
+      setAudiobook({
+        ...audiobook,
+        bookmarked: !newBookmarkedState,
+      });
+    }
+  };
+
   // Utility to get text content
   const getOriginalText = () => {
     if (!audiobook) return '';
@@ -155,11 +182,7 @@ export default function AudiobookPlayerScreen() {
 
   // Render logic
   if (loading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-      </View>
-    );
+    return <PlayerSkeleton />;
   }
 
   if (!audiobook) {
@@ -195,7 +218,6 @@ export default function AudiobookPlayerScreen() {
         text={getOriginalText()}
         currentPosition={position}
         duration={duration}
-        isPlaying={isPlaying}
         fontSize={18}
         lineHeight={30}
       />
@@ -219,13 +241,12 @@ export default function AudiobookPlayerScreen() {
         </View>
 
         <View style={styles.controlsContainer}>
-          <Pressable
-            style={styles.controlButton}
-            onPress={() => {
-              /* Handle bookmark */
-            }}
-          >
-            <Bookmark size={24} color={Colors.gray[600]} />
+          <Pressable style={styles.controlButton} onPress={handleBookmark}>
+            <Bookmark
+              size={24}
+              color={audiobook?.bookmarked ? Colors.primary : Colors.gray[600]}
+              fill={audiobook?.bookmarked ? Colors.primary : 'none'}
+            />
           </Pressable>
           <Pressable style={styles.controlButton} onPress={() => skipBy(-10000)}>
             <View style={styles.skipButton}>
@@ -233,8 +254,14 @@ export default function AudiobookPlayerScreen() {
               <Text style={styles.skipButtonText}>10</Text>
             </View>
           </Pressable>
-          <Pressable style={styles.playButton} onPress={handlePlayPause}>
-            {isPlaying ? <Pause size={32} color={Colors.white} /> : <Play size={32} color={Colors.white} />}
+          <Pressable style={styles.playButton} onPress={handlePlayPause} disabled={isPlayerLoading}>
+            {isPlayerLoading ? (
+              <ActivityIndicator size="large" color={Colors.white} />
+            ) : isPlaying ? (
+              <Pause size={32} color={Colors.white} />
+            ) : (
+              <Play size={32} color={Colors.white} />
+            )}
           </Pressable>
           <Pressable style={styles.controlButton} onPress={() => skipBy(10000)}>
             <View style={styles.skipButton}>

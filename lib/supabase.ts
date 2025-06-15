@@ -8,9 +8,7 @@ const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl as string;
 const supabaseAnonKey = Constants.expoConfig?.extra?.supabaseAnonKey as string;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error(
-    'Missing Supabase configuration. Please check your app.config.js or .env file'
-  );
+  throw new Error('Missing Supabase configuration. Please check your app.config.js or .env file');
 }
 
 // Supabase client

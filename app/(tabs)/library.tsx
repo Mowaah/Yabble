@@ -1,14 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import {
-  StyleSheet,
-  Text,
-  View,
-  FlatList,
-  Pressable,
-  ActivityIndicator,
-  Platform,
-  Modal,
-} from 'react-native';
+import { StyleSheet, Text, View, FlatList, Pressable, ActivityIndicator, Platform, Modal } from 'react-native';
 import { Search, Headphones, CheckCircle2, XCircle } from 'lucide-react-native';
 import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
@@ -18,11 +9,7 @@ import { useAudiobooks } from '../../hooks/useAudiobooks';
 import type { Tables } from '../../lib/database';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { prepareAudioFile, FilePreparationError } from '../../utils/fileUtils';
-import {
-  saveAudioToDevice,
-  shareAudioFile,
-  MediaError,
-} from '../../utils/mediaUtils';
+import { saveAudioToDevice, shareAudioFile, MediaError } from '../../utils/mediaUtils';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { audioEffects } from '../../lib/audio';
 
@@ -45,19 +32,14 @@ export default function LibraryScreen() {
   useFocusEffect(
     useCallback(() => {
       refreshAudiobooks();
-    }, [])
-  );
 
-  // Stop audio when leaving the library screen
-  useFocusEffect(
-    useCallback(() => {
       const unsubscribe = navigation.addListener('blur', () => {
         // Stop all audio when leaving the library
         audioEffects.stopAllAudio().catch(console.error);
       });
 
       return unsubscribe;
-    }, [navigation])
+    }, [navigation, refreshAudiobooks])
   );
 
   const handleRefresh = async () => {
@@ -67,32 +49,30 @@ export default function LibraryScreen() {
   };
 
   const getFilterCount = (status: FilterStatus) => {
-    if (status === 'saved') return 0; // Placeholder for saved audiobooks
+    if (!audiobooks) return 0;
+    if (status === 'saved') {
+      return audiobooks.filter((book) => book.bookmarked).length;
+    }
     return audiobooks.filter((book) => book.status === status).length;
   };
 
   const toggleFavorite = (bookId: string) => {
     setFavorites(
-      (prev) =>
-        prev.includes(bookId)
-          ? prev.filter((id) => id !== bookId)
-          : [bookId, ...prev] // Add to beginning to show at top
+      (prev) => (prev.includes(bookId) ? prev.filter((id) => id !== bookId) : [bookId, ...prev]) // Add to beginning to show at top
     );
   };
 
   const getSortedBooks = () => {
-    let filteredBooks = audiobooks.filter((book) => {
-      const matchesSearch = book.title
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase());
+    if (!audiobooks) return [];
 
-      let matchesFilter = false;
+    let filteredBooks = audiobooks.filter((book) => {
+      const matchesSearch = book.title.toLowerCase().includes(searchQuery.toLowerCase());
+
       if (filterStatus === 'saved') {
-        matchesFilter = false; // No saved books yet
-      } else {
-        matchesFilter = book.status === filterStatus;
+        return matchesSearch && book.bookmarked;
       }
 
+      const matchesFilter = book.status === filterStatus;
       return matchesSearch && matchesFilter;
     });
 
@@ -107,40 +87,14 @@ export default function LibraryScreen() {
     });
   };
 
-  const renderFilterTab = (
-    label: string,
-    value: FilterStatus,
-    count: number
-  ) => (
+  const renderFilterTab = (label: string, value: FilterStatus, count: number) => (
     <Pressable
-      style={[
-        styles.filterTab,
-        filterStatus === value && styles.activeFilterTab,
-      ]}
+      style={[styles.filterTab, filterStatus === value && styles.activeFilterTab]}
       onPress={() => setFilterStatus(value)}
     >
-      <Text
-        style={[
-          styles.filterTabText,
-          filterStatus === value && styles.activeFilterTabText,
-        ]}
-      >
-        {label}
-      </Text>
-      <View
-        style={[
-          styles.filterCount,
-          filterStatus === value && styles.activeFilterCount,
-        ]}
-      >
-        <Text
-          style={[
-            styles.filterCountText,
-            filterStatus === value && styles.activeFilterCountText,
-          ]}
-        >
-          {count}
-        </Text>
+      <Text style={[styles.filterTabText, filterStatus === value && styles.activeFilterTabText]}>{label}</Text>
+      <View style={[styles.filterCount, filterStatus === value && styles.activeFilterCount]}>
+        <Text style={[styles.filterCountText, filterStatus === value && styles.activeFilterCountText]}>{count}</Text>
       </View>
     </Pressable>
   );
@@ -175,7 +129,7 @@ export default function LibraryScreen() {
         case 'draft':
           return 'No drafts in progress';
         case 'saved':
-          return 'No saved audiobooks from hub yet';
+          return 'No bookmarked audiobooks yet';
         default:
           return 'No audiobooks found';
       }
@@ -190,6 +144,8 @@ export default function LibraryScreen() {
         <Text style={styles.emptyText}>
           {searchQuery
             ? 'Try a different search term'
+            : filterStatus === 'saved'
+            ? 'Bookmark audiobooks by tapping the bookmark icon in the player'
             : 'Start creating your first audiobook'}
         </Text>
       </View>
@@ -202,11 +158,7 @@ export default function LibraryScreen() {
     setModalMessage(`Preparing "${audiobook.title}" for sharing...`);
 
     try {
-      const localFileUriToShare = await prepareAudioFile(
-        audiobook.audio_url,
-        audiobook.title,
-        'sharing'
-      );
+      const localFileUriToShare = await prepareAudioFile(audiobook.audio_url, audiobook.title, 'sharing');
 
       // Proceed with platform-specific sharing
       if (Platform.OS === 'web') {
@@ -219,9 +171,7 @@ export default function LibraryScreen() {
           setModalStatus('success');
           setModalMessage('Shared successfully!');
         } else {
-          await navigator.clipboard.writeText(
-            audiobook.audio_url || window.location.href
-          );
+          await navigator.clipboard.writeText(audiobook.audio_url || window.location.href);
           setModalStatus('success');
           setModalMessage('Link copied to clipboard!');
         }
@@ -234,10 +184,7 @@ export default function LibraryScreen() {
       }
     } catch (error: any) {
       console.error('Sharing process error:', error);
-      if (
-        error instanceof FilePreparationError ||
-        error instanceof MediaError
-      ) {
+      if (error instanceof FilePreparationError || error instanceof MediaError) {
         setModalStatus('error');
         setModalMessage(error.message);
       } else {
@@ -253,30 +200,18 @@ export default function LibraryScreen() {
     setModalMessage(`Downloading "${audiobook.title}"...`);
 
     try {
-      const localFileUriForDownload = await prepareAudioFile(
-        audiobook.audio_url,
-        audiobook.title,
-        'download'
-      );
+      const localFileUriForDownload = await prepareAudioFile(audiobook.audio_url, audiobook.title, 'download');
 
       // At this point, file is prepared. Proceed with platform-specific saving.
       if (Platform.OS === 'android') {
         await saveAudioToDevice(localFileUriForDownload, audiobook.title);
         setModalStatus('success');
-        setModalMessage(
-          `"${audiobook.title}" saved. Check your device's Files app or media gallery.`
-        );
+        setModalMessage(`"${audiobook.title}" saved. Check your device's Files app or media gallery.`);
       } else if (Platform.OS === 'ios') {
         // On iOS, saving is typically done via the share sheet.
-        await shareAudioFile(
-          localFileUriForDownload,
-          audiobook.title,
-          `Save: ${audiobook.title}`
-        );
+        await shareAudioFile(localFileUriForDownload, audiobook.title, `Save: ${audiobook.title}`);
         setModalStatus('success');
-        setModalMessage(
-          'Ready to save. Choose an option from the share menu (e.g., Save to Files).'
-        );
+        setModalMessage('Ready to save. Choose an option from the share menu (e.g., Save to Files).');
       } else if (Platform.OS === 'web') {
         const link = document.createElement('a');
         // For web, it's better to use the original URL for direct download if it's not a data URI
@@ -288,18 +223,13 @@ export default function LibraryScreen() {
           // directly via href is tricky. A robust solution would involve reading it to a blob.
           // For now, we alert that this specific case (cached data URI for web download) is complex.
           // Or, we can try to use the localFileUri, knowing it might not be ideal for all browsers.
-          console.warn(
-            'Web download from cached data URI is not fully optimized. Using original URL if possible.'
-          );
+          console.warn('Web download from cached data URI is not fully optimized. Using original URL if possible.');
           link.href = localFileUriForDownload; // Attempt, but might be problematic
           // A better approach if localFileUriForDownload MUST be used:
           // const blob = await FileSystem.readAsStringAsync(localFileUriForDownload, { encoding: FileSystem.EncodingType.Base64 });
           // link.href = `data:audio/mpeg;base64,${blob}`;
         }
-        link.download = `${audiobook.title.replace(
-          /[^a-zA-Z0-9\s]/g,
-          '_'
-        )}.mp3`;
+        link.download = `${audiobook.title.replace(/[^a-zA-Z0-9\s]/g, '_')}.mp3`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -308,17 +238,12 @@ export default function LibraryScreen() {
       }
     } catch (error: any) {
       console.error('Download process error:', error);
-      if (
-        error instanceof FilePreparationError ||
-        error instanceof MediaError
-      ) {
+      if (error instanceof FilePreparationError || error instanceof MediaError) {
         setModalStatus('error');
         setModalMessage(error.message);
       } else {
         setModalStatus('error');
-        setModalMessage(
-          error.message || 'An error occurred during the download process.'
-        );
+        setModalMessage(error.message || 'An error occurred during the download process.');
       }
     }
   };
@@ -329,11 +254,7 @@ export default function LibraryScreen() {
     setModalMessage('');
   };
 
-  const renderAudiobookItem = ({
-    item,
-  }: {
-    item: Tables['audiobooks']['Row'];
-  }) => (
+  const renderAudiobookItem = ({ item }: { item: Tables['audiobooks']['Row'] }) => (
     <AudiobookCard
       book={item}
       isFavorite={favorites.includes(item.id)}
@@ -352,26 +273,12 @@ export default function LibraryScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <Modal
-        transparent={true}
-        animationType="fade"
-        visible={showModal}
-        onRequestClose={closeModal}
-      >
+      <Modal transparent={true} animationType="fade" visible={showModal} onRequestClose={closeModal}>
         <View style={styles.modalBackground}>
           <View style={styles.modalContent}>
-            {modalStatus === 'loading' && (
-              <ActivityIndicator
-                size="large"
-                color={Colors.orange || '#FF8C00'}
-              />
-            )}
-            {modalStatus === 'success' && (
-              <CheckCircle2 size={48} color={Colors.success || 'green'} />
-            )}
-            {modalStatus === 'error' && (
-              <XCircle size={48} color={Colors.error || 'red'} />
-            )}
+            {modalStatus === 'loading' && <ActivityIndicator size="large" color={Colors.orange || '#FF8C00'} />}
+            {modalStatus === 'success' && <CheckCircle2 size={48} color={Colors.success || 'green'} />}
+            {modalStatus === 'error' && <XCircle size={48} color={Colors.error || 'red'} />}
             <Text style={styles.loadingText}>{modalMessage}</Text>
             {(modalStatus === 'success' || modalStatus === 'error') && (
               <Pressable style={styles.okButton} onPress={closeModal}>
@@ -393,11 +300,7 @@ export default function LibraryScreen() {
         />
 
         <View style={styles.filterContainer}>
-          {renderFilterTab(
-            'Completed',
-            'completed',
-            getFilterCount('completed')
-          )}
+          {renderFilterTab('Completed', 'completed', getFilterCount('completed'))}
           {renderFilterTab('Drafts', 'draft', getFilterCount('draft'))}
           {renderFilterTab('Saved', 'saved', getFilterCount('saved'))}
         </View>
