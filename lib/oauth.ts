@@ -1,89 +1,95 @@
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
+import * as QueryParams from 'expo-auth-session/build/QueryParams';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { supabase } from './supabase';
 
 // Required for web support
 WebBrowser.maybeCompleteAuthSession();
 
-// OAuth Configuration
-const redirectUri = AuthSession.makeRedirectUri({
-  scheme: 'yabble',
-  path: 'auth',
-});
+// OAuth Configuration - Handle Expo Go vs standalone app (for other providers)
+const getRedirectUri = () => {
+  // Check if running in Expo Go
+  const isExpoGo = Constants.appOwnership === 'expo';
+
+  if (isExpoGo) {
+    // In Expo Go, use the dynamically generated URL
+    return AuthSession.makeRedirectUri({
+      path: 'auth',
+    });
+  } else {
+    // In standalone app, use custom scheme
+    return AuthSession.makeRedirectUri({
+      scheme: 'yabble',
+      path: 'auth',
+    });
+  }
+};
+
+const redirectUri = getRedirectUri();
+
+console.log('OAuth Redirect URI:', redirectUri);
+console.log('Running in Expo Go:', Constants.appOwnership === 'expo');
 
 export interface OAuthResult {
   data?: any;
   error?: Error;
 }
 
-// Get Supabase URL from environment
-const getSupabaseUrl = () => {
-  return process.env.EXPO_PUBLIC_SUPABASE_URL;
+// Create session from URL (for deep linking - other providers)
+const createSessionFromUrl = async (url: string) => {
+  const { params, errorCode } = QueryParams.getQueryParams(url);
+
+  if (errorCode) throw new Error(errorCode);
+
+  const { access_token, refresh_token } = params;
+
+  if (!access_token) return;
+
+  const { data, error } = await supabase.auth.setSession({
+    access_token,
+    refresh_token,
+  });
+
+  if (error) throw error;
+  return data.session;
 };
 
 /**
- * Sign in with Google using OAuth
+ * Sign in with Google using OAuth (for Expo Go)
  */
 export async function signInWithGoogle(): Promise<OAuthResult> {
   try {
-    if (Platform.OS === 'web') {
-      // Web implementation using Supabase Auth
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: redirectUri,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          },
+    // Use Supabase OAuth with skipBrowserRedirect for mobile
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: redirectUri,
+        skipBrowserRedirect: true,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
         },
-      });
+      },
+    });
 
-      if (error) throw error;
-      return { data };
-    } else {
-      // Mobile implementation using WebBrowser
-      const supabaseUrl = getSupabaseUrl();
-      const authUrl = `${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(redirectUri)}`;
+    if (error) throw error;
 
-      // Use WebBrowser for OAuth flow
-      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+    // Open the OAuth URL in WebBrowser
+    const result = await WebBrowser.openAuthSessionAsync(data?.url ?? '', redirectUri);
 
-      if (result.type === 'success') {
-        const { url } = result;
-
-        // Parse the URL to get tokens
-        let accessToken = '';
-        let refreshToken = '';
-
-        if (url.includes('#')) {
-          const urlParams = new URLSearchParams(url.split('#')[1]);
-          accessToken = urlParams.get('access_token') || '';
-          refreshToken = urlParams.get('refresh_token') || '';
-        } else if (url.includes('?')) {
-          const urlParams = new URLSearchParams(url.split('?')[1]);
-          accessToken = urlParams.get('access_token') || '';
-          refreshToken = urlParams.get('refresh_token') || '';
-        }
-
-        if (accessToken) {
-          const { data, error } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-
-          if (error) throw error;
-          return { data };
-        }
-      }
-
-      if (result.type === 'cancel') {
-        throw new Error('OAuth authentication was cancelled');
-      }
-
-      throw new Error('OAuth authentication failed');
+    if (result.type === 'success') {
+      const { url } = result;
+      const session = await createSessionFromUrl(url);
+      return { data: session };
     }
+
+    if (result.type === 'cancel') {
+      throw new Error('OAuth authentication was cancelled');
+    }
+
+    throw new Error('OAuth authentication failed');
   } catch (error) {
     console.error('Google OAuth error:', error);
     return { error: error as Error };
@@ -95,55 +101,29 @@ export async function signInWithGoogle(): Promise<OAuthResult> {
  */
 export async function signInWithApple(): Promise<OAuthResult> {
   try {
-    if (Platform.OS === 'web') {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'apple',
-        options: {
-          redirectTo: redirectUri,
-        },
-      });
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'apple',
+      options: {
+        redirectTo: redirectUri,
+        skipBrowserRedirect: true,
+      },
+    });
 
-      if (error) throw error;
-      return { data };
-    } else {
-      const supabaseUrl = getSupabaseUrl();
-      const authUrl = `${supabaseUrl}/auth/v1/authorize?provider=apple&redirect_to=${encodeURIComponent(redirectUri)}`;
+    if (error) throw error;
 
-      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+    const result = await WebBrowser.openAuthSessionAsync(data?.url ?? '', redirectUri);
 
-      if (result.type === 'success') {
-        const { url } = result;
-
-        let accessToken = '';
-        let refreshToken = '';
-
-        if (url.includes('#')) {
-          const urlParams = new URLSearchParams(url.split('#')[1]);
-          accessToken = urlParams.get('access_token') || '';
-          refreshToken = urlParams.get('refresh_token') || '';
-        } else if (url.includes('?')) {
-          const urlParams = new URLSearchParams(url.split('?')[1]);
-          accessToken = urlParams.get('access_token') || '';
-          refreshToken = urlParams.get('refresh_token') || '';
-        }
-
-        if (accessToken) {
-          const { data, error } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-
-          if (error) throw error;
-          return { data };
-        }
-      }
-
-      if (result.type === 'cancel') {
-        throw new Error('OAuth authentication was cancelled');
-      }
-
-      throw new Error('OAuth authentication failed');
+    if (result.type === 'success') {
+      const { url } = result;
+      const session = await createSessionFromUrl(url);
+      return { data: session };
     }
+
+    if (result.type === 'cancel') {
+      throw new Error('OAuth authentication was cancelled');
+    }
+
+    throw new Error('OAuth authentication failed');
   } catch (error) {
     console.error('Apple OAuth error:', error);
     return { error: error as Error };
@@ -155,58 +135,30 @@ export async function signInWithApple(): Promise<OAuthResult> {
  */
 export async function signInWithFacebook(): Promise<OAuthResult> {
   try {
-    if (Platform.OS === 'web') {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'facebook',
-        options: {
-          redirectTo: redirectUri,
-          scopes: 'email',
-        },
-      });
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'facebook',
+      options: {
+        redirectTo: redirectUri,
+        skipBrowserRedirect: true,
+        scopes: 'email',
+      },
+    });
 
-      if (error) throw error;
-      return { data };
-    } else {
-      const supabaseUrl = getSupabaseUrl();
-      const authUrl = `${supabaseUrl}/auth/v1/authorize?provider=facebook&redirect_to=${encodeURIComponent(
-        redirectUri
-      )}&scopes=email`;
+    if (error) throw error;
 
-      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+    const result = await WebBrowser.openAuthSessionAsync(data?.url ?? '', redirectUri);
 
-      if (result.type === 'success') {
-        const { url } = result;
-
-        let accessToken = '';
-        let refreshToken = '';
-
-        if (url.includes('#')) {
-          const urlParams = new URLSearchParams(url.split('#')[1]);
-          accessToken = urlParams.get('access_token') || '';
-          refreshToken = urlParams.get('refresh_token') || '';
-        } else if (url.includes('?')) {
-          const urlParams = new URLSearchParams(url.split('?')[1]);
-          accessToken = urlParams.get('access_token') || '';
-          refreshToken = urlParams.get('refresh_token') || '';
-        }
-
-        if (accessToken) {
-          const { data, error } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-
-          if (error) throw error;
-          return { data };
-        }
-      }
-
-      if (result.type === 'cancel') {
-        throw new Error('OAuth authentication was cancelled');
-      }
-
-      throw new Error('OAuth authentication failed');
+    if (result.type === 'success') {
+      const { url } = result;
+      const session = await createSessionFromUrl(url);
+      return { data: session };
     }
+
+    if (result.type === 'cancel') {
+      throw new Error('OAuth authentication was cancelled');
+    }
+
+    throw new Error('OAuth authentication failed');
   } catch (error) {
     console.error('Facebook OAuth error:', error);
     return { error: error as Error };
@@ -263,6 +215,6 @@ export async function handleOAuthCallback(url: string): Promise<OAuthResult> {
  * Get OAuth redirect URL for a provider
  */
 export function getOAuthRedirectUrl(provider: 'google' | 'apple' | 'facebook'): string {
-  const supabaseUrl = getSupabaseUrl();
+  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
   return `${supabaseUrl}/auth/v1/authorize?provider=${provider}&redirect_to=${encodeURIComponent(redirectUri)}`;
 }

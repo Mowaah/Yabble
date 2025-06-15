@@ -23,7 +23,14 @@ This guide explains how to set up OAuth authentication with Google, Apple, and F
 
 Add these redirect URLs to your Supabase auth settings:
 
-**For Development:**
+**For Development with Expo Go:**
+
+- `http://localhost:8081/auth` (Expo web)
+- `exp://[your-expo-session-id].exp.direct/--/auth` (Expo Go app)
+  - ⚠️ **Important**: This URL changes each time you restart Expo. Check your console logs for the exact URL.
+  - Example: `exp://hh_w0zk-mowaa-8081.exp.direct/--/auth`
+
+**For Development with Standalone App:**
 
 - `http://localhost:8081/auth` (Expo web)
 - `yabble://auth` (Mobile deep link)
@@ -33,37 +40,76 @@ Add these redirect URLs to your Supabase auth settings:
 - `https://yourdomain.com/auth` (Your web domain)
 - `yabble://auth` (Mobile deep link)
 
-## 2. Google OAuth Setup
+### How to Find Your Expo Go Redirect URL
 
-### Create Google OAuth Client
+1. Start your app with `npm run dev`
+2. Open the app in Expo Go
+3. Try to sign in with Google (it will fail initially)
+4. Check your console logs for a line like:
+   ```
+   OAuth Redirect URI: exp://hh_w0zk-mowaa-8081.exp.direct/--/auth
+   ```
+5. Copy this exact URL to your Supabase redirect URLs
+
+## 2. Google OAuth Setup (Native Sign-In for Mobile)
+
+### For Mobile Apps (Recommended)
+
+Mobile apps should use **Native Google Sign-In** instead of OAuth flow for better user experience.
+
+### Create Google OAuth Clients
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a new project or select existing one
-3. Enable Google+ API
+3. Enable Google+ API (or Google Identity API)
 4. Go to Credentials > Create Credentials > OAuth 2.0 Client ID
 
-### Configure OAuth Client
+You need to create **separate OAuth clients** for each platform:
 
-**For Web Application:**
+### Android OAuth Client
 
-- Authorized JavaScript origins: `http://localhost:8081`, `https://yourdomain.com`
-- Authorized redirect URIs: `https://[your-supabase-project].supabase.co/auth/v1/callback`
+1. **Application type**: Android
+2. **Package name**: `com.yabble.app` (from your app.config.js)
+3. **SHA-1 certificate fingerprint**:
+   - **For Development**: Get from `eas credentials` command
+   - **For Production**: Get from Google Play Console → App signing
 
-**For Mobile Application (Android):**
+### iOS OAuth Client
 
-- Package name: `com.yabble.app`
-- SHA-1 certificate fingerprint: (Get from your keystore)
+1. **Application type**: iOS
+2. **Bundle ID**: `com.yabble.app` (from your app.config.js)
+3. **App Store ID**: (if published)
+4. **Team ID**: (from Apple Developer account)
 
-**For Mobile Application (iOS):**
+### Web OAuth Client (Required for Supabase)
 
-- Bundle ID: `com.yabble.app`
+1. **Application type**: Web application
+2. **Authorized redirect URIs**: `https://agntiglgnujyppjzcflk.supabase.co/auth/v1/callback`
 
 ### Add to Supabase
 
-1. Copy the Client ID (Client Secret is not needed for mobile OAuth)
-2. In Supabase Dashboard > Authentication > Providers > Google
-3. Enable Google provider and add your Client ID
-4. Leave Client Secret empty for mobile-only apps
+1. In Supabase Dashboard > Authentication > Providers > Google
+2. Enable Google provider
+3. **Client IDs**: Add ALL the Client IDs you created (Android, iOS, Web) separated by commas:
+   ```
+   939237185009-android-client-id.apps.googleusercontent.com,
+   939237185009-ios-client-id.apps.googleusercontent.com,
+   939237185009-75c21naruful8i2dj49t58m4g692pg4v.apps.googleusercontent.com
+   ```
+4. **Client Secret**: Use the Web client secret
+5. **Skip nonce check**: Enable this for iOS (recommended)
+
+### Update Your App Code
+
+The native Google Sign-In is already configured in your `lib/oauth.ts` file with:
+
+- **Web Client ID**: `939237185009-75c21naruful8i2dj49t58m4g692pg4v.apps.googleusercontent.com`
+- **Scopes**: Email and profile access
+
+### Testing
+
+1. **Development**: Make sure you've added the development SHA-1 certificate
+2. **Production**: Make sure you've added the production SHA-1 certificate from Google Play Console
 
 ## 3. Apple Sign-In Setup
 

@@ -1,5 +1,24 @@
 import { supabase } from './supabase';
 import * as AuthSession from 'expo-auth-session';
+import Constants from 'expo-constants';
+
+/**
+ * Get the correct redirect URI based on environment
+ */
+const getRedirectUri = () => {
+  const isExpoGo = Constants.appOwnership === 'expo';
+
+  if (isExpoGo) {
+    return AuthSession.makeRedirectUri({
+      path: 'auth',
+    });
+  } else {
+    return AuthSession.makeRedirectUri({
+      scheme: 'yabble',
+      path: 'auth',
+    });
+  }
+};
 
 /**
  * Debug OAuth configuration
@@ -23,11 +42,23 @@ export async function debugOAuthConfig() {
   }
 
   // Debug redirect URI configuration
-  const redirectUri = AuthSession.makeRedirectUri({
-    scheme: 'yabble',
-    path: 'auth',
-  });
+  const redirectUri = getRedirectUri();
+  const isExpoGo = Constants.appOwnership === 'expo';
+
   console.log('Mobile app redirect URI:', redirectUri);
+  console.log('Running in Expo Go:', isExpoGo);
+
+  if (isExpoGo) {
+    console.log('🔧 EXPO GO SETUP:');
+    console.log('1. Add this URL to Supabase Dashboard → Authentication → Settings → Redirect URLs:');
+    console.log(`   ${redirectUri}`);
+    console.log('2. Save the settings in Supabase');
+    console.log('3. Try OAuth again');
+  } else {
+    console.log('🔧 STANDALONE APP SETUP:');
+    console.log('1. Custom scheme configured: yabble://auth');
+    console.log('2. Make sure deep linking is set up in your native code');
+  }
 
   // Test Supabase connection
   try {
@@ -49,10 +80,7 @@ export async function testOAuthProvider(provider: 'google' | 'apple' | 'facebook
 
   try {
     // Test with the actual redirect URI that will be used
-    const redirectUri = AuthSession.makeRedirectUri({
-      scheme: 'yabble',
-      path: 'auth',
-    });
+    const redirectUri = getRedirectUri();
 
     console.log(`Using redirect URI: ${redirectUri}`);
 
@@ -141,10 +169,7 @@ export async function debugOAuthFlow(provider: 'google' | 'apple' | 'facebook') 
 
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
   const cleanUrl = supabaseUrl?.replace(/\/$/, '');
-  const redirectUri = AuthSession.makeRedirectUri({
-    scheme: 'yabble',
-    path: 'auth',
-  });
+  const redirectUri = getRedirectUri();
 
   console.log('1. Environment check:');
   console.log(`   Supabase URL: ${cleanUrl}`);
