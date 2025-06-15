@@ -5,6 +5,25 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { supabase } from './supabase';
 
+// Conditionally import Google Sign-In (only available in development builds)
+let GoogleSignin: any = null;
+let statusCodes: any = null;
+
+try {
+  const googleSignInModule = require('@react-native-google-signin/google-signin');
+  GoogleSignin = googleSignInModule.GoogleSignin;
+  statusCodes = googleSignInModule.statusCodes;
+
+  // Configure Google Sign-In for native builds
+  GoogleSignin?.configure({
+    scopes: ['https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile'],
+    webClientId: '939237185009-75c21naruful8i2dj49t58m4g692pg4v.apps.googleusercontent.com', // Web client ID
+    iosClientId: '939237185009-ihdc60udhgeose7sq5epksvajd25dsm6.apps.googleusercontent.com', // iOS client ID
+  });
+} catch (error) {
+  console.log('Google Sign-In not available (Expo Go mode)');
+}
+
 // Required for web support
 WebBrowser.maybeCompleteAuthSession();
 
@@ -57,42 +76,82 @@ const createSessionFromUrl = async (url: string) => {
 };
 
 /**
- * Sign in with Google using OAuth (for Expo Go)
+ * Sign in with Google using Native Sign-In (when available) or OAuth (Expo Go)
  */
 export async function signInWithGoogle(): Promise<OAuthResult> {
   try {
-    // Use Supabase OAuth with skipBrowserRedirect for mobile
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: redirectUri,
-        skipBrowserRedirect: true,
-        queryParams: {
-          access_type: 'offline',
-          prompt: 'consent',
+    const isExpoGo = Constants.appOwnership === 'expo';
+
+    // Use native Google Sign-In if available (development/production builds)
+    if (GoogleSignin && !isExpoGo) {
+      console.log('Using native Google Sign-In');
+
+      // Check if Google Play Services are available (Android only)
+      if (Platform.OS === 'android') {
+        await GoogleSignin.hasPlayServices();
+      }
+
+      // Sign in with Google
+      const userInfo = await GoogleSignin.signIn();
+
+      if (userInfo.data?.idToken) {
+        // Use the ID token with Supabase
+        const { data, error } = await supabase.auth.signInWithIdToken({
+          provider: 'google',
+          token: userInfo.data.idToken,
+        });
+
+        if (error) throw error;
+        return { data };
+      } else {
+        throw new Error('No ID token received from Google Sign-In');
+      }
+    } else {
+      // Fall back to OAuth flow for Expo Go
+      console.log('Using OAuth flow (Expo Go)');
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUri,
+          skipBrowserRedirect: true,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
         },
-      },
-    });
+      });
 
-    if (error) throw error;
+      if (error) throw error;
 
-    // Open the OAuth URL in WebBrowser
-    const result = await WebBrowser.openAuthSessionAsync(data?.url ?? '', redirectUri);
+      // Open the OAuth URL in WebBrowser
+      const result = await WebBrowser.openAuthSessionAsync(data?.url ?? '', redirectUri);
 
-    if (result.type === 'success') {
-      const { url } = result;
-      const session = await createSessionFromUrl(url);
-      return { data: session };
+      if (result.type === 'success') {
+        const { url } = result;
+        const session = await createSessionFromUrl(url);
+        return { data: session };
+      }
+
+      if (result.type === 'cancel') {
+        throw new Error('OAuth authentication was cancelled');
+      }
+
+      throw new Error('OAuth authentication failed');
     }
-
-    if (result.type === 'cancel') {
-      throw new Error('OAuth authentication was cancelled');
-    }
-
-    throw new Error('OAuth authentication failed');
-  } catch (error) {
+  } catch (error: any) {
     console.error('Google OAuth error:', error);
-    return { error: error as Error };
+
+    // Handle specific Google Sign-In errors
+    if (statusCodes && error.code === statusCodes.SIGN_IN_CANCELLED) {
+      return { error: new Error('Google Sign-In was cancelled') };
+    } else if (statusCodes && error.code === statusCodes.IN_PROGRESS) {
+      return { error: new Error('Google Sign-In is already in progress') };
+    } else if (statusCodes && error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+      return { error: new Error('Google Play Services not available') };
+    } else {
+      return { error: error as Error };
+    }
   }
 }
 
