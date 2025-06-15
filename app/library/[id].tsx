@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { StyleSheet, Text, View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ChevronLeft, Share2, Play, Pause, Bookmark, RotateCw, RotateCcw, Rewind } from 'lucide-react-native';
@@ -32,10 +32,11 @@ export default function AudiobookPlayerScreen() {
   const [loading, setLoading] = useState(true);
 
   // Player state
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [position, setPosition] = useState(0);
+  const positionRef = useRef(position);
   const [isPlayerLoading, setIsPlayerLoading] = useState(false);
   const [isSeeking, setIsSeeking] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1.0);
@@ -71,6 +72,26 @@ export default function AudiobookPlayerScreen() {
     fetchAudiobook();
   }, [id, session?.user?.id]);
 
+  // Keep position ref updated
+  useEffect(() => {
+    positionRef.current = position;
+  }, [position]);
+
+  // Playback status update handler
+  const onPlaybackStatusUpdate = useCallback(
+    (status: AVPlaybackStatus) => {
+      if (!status.isLoaded) return;
+
+      if (!isSeeking) {
+        setPosition(status.positionMillis);
+      }
+      setDuration(status.durationMillis || 0);
+      setIsPlaying(status.isPlaying);
+      setIsPlayerLoading(status.isBuffering);
+    },
+    [isSeeking]
+  );
+
   // Sound lifecycle management
   useEffect(() => {
     const loadSound = async () => {
@@ -81,12 +102,23 @@ export default function AudiobookPlayerScreen() {
             playsInSilentModeIOS: true,
           });
 
-          const { sound: newSound } = await Audio.Sound.createAsync(
+          const { sound } = await Audio.Sound.createAsync(
             { uri: audiobook.audio_url },
-            { shouldPlay: false },
-            onPlaybackStatusUpdate
+            { shouldPlay: false, progressUpdateIntervalMillis: 500 }
           );
-          setSound(newSound);
+
+          soundRef.current = sound;
+          soundRef.current.setOnPlaybackStatusUpdate(onPlaybackStatusUpdate);
+
+          // If there's a last known position, seek to it
+          if (audiobook.last_position_millis && audiobook.last_position_millis > 0) {
+            await soundRef.current.setPositionAsync(audiobook.last_position_millis);
+          }
+
+          const status = await sound.getStatusAsync();
+          if (status.isLoaded) {
+            setDuration(status.durationMillis || 0);
+          }
         } catch (error) {
           console.error('Error loading sound', error);
         }
@@ -96,52 +128,58 @@ export default function AudiobookPlayerScreen() {
     loadSound();
 
     return () => {
-      sound?.unloadAsync();
-    };
-  }, [audiobook?.audio_url]);
+      // Save progress when the component unmounts
+      const saveProgress = async () => {
+        if (soundRef.current && audiobook?.id && positionRef.current > 0) {
+          try {
+            const status = await soundRef.current.getStatusAsync();
+            if (status.isLoaded) {
+              await updateAudiobook(audiobook.id, {
+                last_position_millis: status.positionMillis,
+              });
+            }
+          } catch (error) {
+            // Don't need to bother the user, just log it.
+            console.error('Failed to save progress:', error);
+          }
+        }
+      };
 
-  // Playback status update handler
-  const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
-    if (status.isLoaded) {
-      if (!isSeeking) {
-        setPosition(status.positionMillis);
-      }
-      setDuration(status.durationMillis || 0);
-      setIsPlaying(status.isPlaying);
-      setIsPlayerLoading(status.isBuffering);
-    }
-  };
+      saveProgress();
+      soundRef.current?.unloadAsync();
+    };
+  }, [audiobook?.id, audiobook?.audio_url]);
 
   // User actions
   const handlePlayPause = async () => {
-    if (!sound) return;
-    isPlaying ? await sound.pauseAsync() : await sound.playAsync();
+    if (!soundRef.current) return;
+    isPlaying ? await soundRef.current.pauseAsync() : await soundRef.current.playAsync();
   };
 
   const handleSeek = async (value: number) => {
-    if (!sound) return;
+    if (!soundRef.current) return;
     setIsSeeking(false);
-    await sound.setPositionAsync(value);
+    await soundRef.current.setPositionAsync(value);
   };
 
   const handleSlidingStart = () => {
-    if (!sound) return;
+    if (!soundRef.current) return;
     setIsSeeking(true);
   };
 
   const skipBy = async (milliseconds: number) => {
-    if (!sound) return;
+    if (!soundRef.current) return;
     const newPosition = position + milliseconds;
-    await sound.setPositionAsync(Math.max(0, Math.min(newPosition, duration)));
+    await soundRef.current.setPositionAsync(Math.max(0, Math.min(newPosition, duration)));
   };
 
   const handleRateChange = async () => {
-    if (!sound) return;
+    if (!soundRef.current) return;
     const currentIndex = PLAYBACK_RATES.indexOf(playbackRate);
     const nextIndex = (currentIndex + 1) % PLAYBACK_RATES.length;
     const newRate = PLAYBACK_RATES[nextIndex];
     try {
-      await sound.setRateAsync(newRate, true);
+      await soundRef.current.setRateAsync(newRate, true);
       setPlaybackRate(newRate);
     } catch (error) {
       console.error('Failed to set playback rate', error);
@@ -166,17 +204,6 @@ export default function AudiobookPlayerScreen() {
         ...audiobook,
         bookmarked: !newBookmarkedState,
       });
-    }
-  };
-
-  // Utility to get text content
-  const getOriginalText = () => {
-    if (!audiobook) return '';
-    try {
-      const parsedContent = JSON.parse(audiobook.text_content || '{}');
-      return parsedContent.originalText || audiobook.text_content || '';
-    } catch {
-      return audiobook.text_content || '';
     }
   };
 
@@ -215,7 +242,7 @@ export default function AudiobookPlayerScreen() {
 
       {/* Text Content */}
       <HighlightedText
-        text={getOriginalText()}
+        text={audiobook.text_content || ''}
         currentPosition={position}
         duration={duration}
         fontSize={18}

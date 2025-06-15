@@ -29,19 +29,18 @@ async function textToSpeech(
     pitch?: number;
   },
   onProgress: (percentage: number) => void
-): Promise<Blob> {
-  const url = `${API_URL}/${voiceId}`; // Using non-streaming endpoint for simplicity of progress simulation
+): Promise<{ audioBase64: string; alignment: any }> {
+  const url = `${ELEVENLABS_API_URL}/text-to-speech/${voiceId}/with-timestamps`;
 
-  // Simulate progress with a timer for a better UX than jumpy stream-based progress
+  // Simulate progress with a timer
   let progress = 0;
   const interval = setInterval(() => {
-    progress += Math.random() * 5; // Increment progress at random intervals
+    progress += Math.random() * 5;
     if (progress > 95) {
-      // Don't let simulated progress hit 100%
       progress = 95;
     }
     onProgress(progress);
-  }, 300); // Update every 300ms
+  }, 300);
 
   try {
     const response = await fetch(url, {
@@ -49,6 +48,7 @@ async function textToSpeech(
       headers: {
         'Content-Type': 'application/json',
         'xi-api-key': XI_API_KEY!,
+        accept: 'application/json',
       },
       body: JSON.stringify({
         text: text,
@@ -62,17 +62,20 @@ async function textToSpeech(
       }),
     });
 
-    clearInterval(interval); // Stop simulation once fetch is complete
+    clearInterval(interval);
 
     if (!response.ok) {
       const errorData = await response.json();
       throw new Error(errorData.detail?.message || 'Failed to generate audio');
     }
 
-    onProgress(100); // Final progress update
-    return response.blob();
+    onProgress(100);
+
+    const responseData = await response.json();
+
+    return { audioBase64: responseData.audio_base64, alignment: responseData.alignment };
   } catch (error) {
-    clearInterval(interval); // Ensure interval is cleared on error
+    clearInterval(interval);
     throw error;
   }
 }

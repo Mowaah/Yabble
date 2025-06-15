@@ -12,12 +12,12 @@ interface HighlightedTextProps {
   lineHeight?: number;
 }
 
-// Data structures for our list
 interface Word {
   text: string;
-  startTime: number;
-  endTime: number;
+  start: number;
+  end: number;
 }
+
 interface Line {
   key: string;
   words: Word[];
@@ -31,65 +31,91 @@ const HighlightedText: React.FC<HighlightedTextProps> = ({
   lineHeight = 30,
 }) => {
   const listRef = useRef<FlashList<Line>>(null);
-  const activeLineIndex = useRef<number>(0);
 
-  // Memoize the expensive computation of turning a string into structured lines and words.
-  // This now only runs if the text or duration changes.
   const lines = useMemo<Line[]>(() => {
-    if (!text || !duration) return [];
+    if (!text) return [];
 
-    let wordCount = 0;
-    const allWords = text.split(/\s+/).filter(Boolean);
-    const totalWords = allWords.length;
+    try {
+      // First, try to parse the text as JSON, which is the new format.
+      const parsedContent = JSON.parse(text);
 
-    // Create lines of text, which is better for performance.
-    return text.split('\n').map((lineText, lineIndex) => {
-      const wordsInLine = lineText.split(/\s+/).filter(Boolean);
-      return {
-        key: `line-${lineIndex}`,
-        words: wordsInLine.map((wordText) => {
-          // Estimate start and end time for each word
-          const startTime = (wordCount / totalWords) * duration;
-          const endTime = ((wordCount + 1) / totalWords) * duration;
-          wordCount++;
-          return { text: wordText, startTime, endTime };
-        }),
-      };
-    });
+      if (parsedContent.alignment) {
+        // --- Logic for NEW data with precise timings ---
+        const { characters, character_start_times_seconds, character_end_times_seconds } = parsedContent.alignment;
+        const originalText = parsedContent.originalText || '';
+        const words = originalText.split(/(\s+)/);
+
+        let charIndex = 0;
+        const wordTimings: Word[] = [];
+
+        words.forEach((wordStr: string) => {
+          if (wordStr.trim().length === 0) {
+            charIndex += wordStr.length;
+            return;
+          }
+
+          const startCharIndex = charIndex;
+          const endCharIndex = charIndex + wordStr.length - 1;
+
+          const start = character_start_times_seconds[startCharIndex] * 1000;
+          const end = character_end_times_seconds[endCharIndex] * 1000;
+
+          wordTimings.push({ text: wordStr, start, end });
+          charIndex += wordStr.length;
+        });
+
+        const originalLines = originalText.split('\n');
+        let wordIdx = 0;
+        return originalLines
+          .map((lineText: string, index: number) => {
+            const wordsInLineText = lineText.trim().split(/\s+/).filter(Boolean);
+            const wordsForThisLine = wordTimings.slice(wordIdx, wordIdx + wordsInLineText.length);
+            wordIdx += wordsInLineText.length;
+            return { key: `line-${index}`, words: wordsForThisLine };
+          })
+          .filter((line: Line) => line.words.length > 0);
+      }
+
+      // If it's JSON but doesn't have alignment, use originalText for estimation.
+      const textToEstimate = parsedContent.originalText || text;
+      return estimateTimings(textToEstimate, duration);
+    } catch (e) {
+      // --- Logic for OLD data (plain text) ---
+      // If parsing fails, it's a plain string. Use estimation.
+      return estimateTimings(text, duration);
+    }
   }, [text, duration]);
 
   // This effect finds the current active line and smoothly scrolls to it.
-  // It's optimized to not run on every single position change.
   useEffect(() => {
-    // Only check every ~500ms to avoid performance issues
-    if (Math.round(currentPosition % 500) > 50) return;
+    if (!lines || lines.length === 0 || currentPosition === 0) return;
 
+    let activeLine = -1;
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      if (line.words.length === 0) continue;
-
-      const firstWord = line.words[0];
-      const lastWord = line.words[line.words.length - 1];
-
-      if (currentPosition >= firstWord.startTime && currentPosition <= lastWord.endTime) {
-        if (i !== activeLineIndex.current) {
-          activeLineIndex.current = i;
-          listRef.current?.scrollToIndex({
-            index: i,
-            animated: true,
-            viewPosition: 0.3, // Keep the line near the top-center
-          });
-        }
+      if (
+        line.words.length > 0 &&
+        currentPosition >= line.words[0].start &&
+        currentPosition <= line.words[line.words.length - 1].end
+      ) {
+        activeLine = i;
         break;
       }
     }
-  }, [currentPosition, lines]);
 
-  // This component renders a single line, with word-by-word highlighting.
+    if (activeLine !== -1) {
+      listRef.current?.scrollToIndex({
+        index: activeLine,
+        animated: true,
+        viewPosition: 0.3,
+      });
+    }
+  }, [lines, currentPosition]);
+
   const renderLine = ({ item }: { item: Line }) => (
     <Text style={[styles.textWrapper, { fontSize, lineHeight }]}>
       {item.words.map((word, index) => {
-        const isActive = currentPosition >= word.startTime && currentPosition < word.endTime;
+        const isActive = currentPosition >= word.start && currentPosition < word.end;
         return (
           <Text key={index} style={[styles.wordSegment, isActive && styles.activeSegment]}>
             {`${word.text} `}
@@ -106,12 +132,54 @@ const HighlightedText: React.FC<HighlightedTextProps> = ({
         data={lines}
         renderItem={renderLine}
         keyExtractor={(item) => item.key}
-        estimatedItemSize={lineHeight * 2} // Help FlashList optimize rendering
+        estimatedItemSize={lineHeight * 2}
         contentContainerStyle={styles.content}
+        extraData={currentPosition}
       />
     </View>
   );
 };
+
+// This helper function contains the improved estimation logic
+function estimateTimings(text: string, duration: number): Line[] {
+  const words = text.split(/\s+/).filter(Boolean);
+  const totalWords = words.length;
+  if (totalWords === 0 || duration === 0) {
+    return [{ key: 'line-0', words: [{ text, start: 0, end: duration }] }];
+  }
+
+  const avgTimePerWord = duration / totalWords;
+  let currentTime = 0;
+  const wordTimings: Word[] = [];
+
+  words.forEach((word) => {
+    let wordDuration = avgTimePerWord;
+    // Add pauses for punctuation
+    if (word.endsWith(',')) wordDuration += 200; // Short pause
+    if (word.endsWith('.') || word.endsWith('!') || word.endsWith('?')) {
+      wordDuration += 400; // Longer pause
+    }
+
+    wordTimings.push({
+      text: word,
+      start: currentTime,
+      end: currentTime + wordDuration,
+    });
+    currentTime += wordDuration;
+  });
+
+  // Group into lines for rendering
+  const originalLines = text.split('\n');
+  let wordIdx = 0;
+  return originalLines
+    .map((lineText, index) => {
+      const wordsInLineText = lineText.trim().split(/\s+/).filter(Boolean);
+      const wordsForThisLine = wordTimings.slice(wordIdx, wordIdx + wordsInLineText.length);
+      wordIdx += wordsInLineText.length;
+      return { key: `line-${index}`, words: wordsForThisLine };
+    })
+    .filter((line) => line.words.length > 0);
+}
 
 const styles = StyleSheet.create({
   container: {

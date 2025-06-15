@@ -14,28 +14,14 @@ export async function getAudiobooks(userId: string) {
   return { data, error };
 }
 
-export async function createAudiobook(
-  audiobook: Tables['audiobooks']['Insert']
-) {
-  const { data, error } = await supabase
-    .from('audiobooks')
-    .insert(audiobook)
-    .select()
-    .single();
+export async function createAudiobook(audiobook: Tables['audiobooks']['Insert']) {
+  const { data, error } = await supabase.from('audiobooks').insert(audiobook).select().single();
 
   return { data, error };
 }
 
-export async function updateAudiobook(
-  id: string,
-  updates: Partial<Tables['audiobooks']['Update']>
-) {
-  const { data, error } = await supabase
-    .from('audiobooks')
-    .update(updates)
-    .eq('id', id)
-    .select()
-    .single();
+export async function updateAudiobook(id: string, updates: Partial<Tables['audiobooks']['Update']>) {
+  const { data, error } = await supabase.from('audiobooks').update(updates).eq('id', id).select().single();
 
   return { data, error };
 }
@@ -54,11 +40,7 @@ export async function deleteAudiobook(id: string) {
 // User Profiles
 export async function getUserProfile(userId: string) {
   try {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
 
     if (error) throw error;
     return { data, error: null };
@@ -68,17 +50,9 @@ export async function getUserProfile(userId: string) {
   }
 }
 
-export async function updateUserProfile(
-  userId: string,
-  updates: Partial<Tables['profiles']['Update']>
-) {
+export async function updateUserProfile(userId: string, updates: Partial<Tables['profiles']['Update']>) {
   try {
-    const { data, error } = await supabase
-      .from('profiles')
-      .update(updates)
-      .eq('id', userId)
-      .select()
-      .single();
+    const { data, error } = await supabase.from('profiles').update(updates).eq('id', userId).select().single();
 
     if (error) throw error;
     return { data, error: null };
@@ -90,22 +64,13 @@ export async function updateUserProfile(
 
 // Voice Settings
 export async function getVoiceSettings(userId: string) {
-  const { data, error } = await supabase
-    .from('voice_settings')
-    .select('*')
-    .eq('user_id', userId);
+  const { data, error } = await supabase.from('voice_settings').select('*').eq('user_id', userId);
 
   return { data, error };
 }
 
-export async function saveVoiceSettings(
-  settings: Tables['voice_settings']['Insert']
-) {
-  const { data, error } = await supabase
-    .from('voice_settings')
-    .insert(settings)
-    .select()
-    .single();
+export async function saveVoiceSettings(settings: Tables['voice_settings']['Insert']) {
+  const { data, error } = await supabase.from('voice_settings').insert(settings).select().single();
 
   return { data, error };
 }

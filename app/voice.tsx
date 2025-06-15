@@ -70,7 +70,7 @@ export default function VoiceScreen() {
         }
       })();
 
-      const audioBlob = await elevenlabsApi.textToSpeech(
+      const { audioBase64, alignment } = await elevenlabsApi.textToSpeech(
         originalText,
         selectedVoice,
         {
@@ -81,35 +81,32 @@ export default function VoiceScreen() {
         setProgress
       );
 
-      // Convert blob to base64 with proper MIME type for iOS compatibility
-      const reader = new FileReader();
-      reader.readAsDataURL(audioBlob);
-      reader.onloadend = async () => {
-        let base64Audio = reader.result as string;
-
-        // Ensure proper MIME type for iOS compatibility
-        if (!base64Audio.startsWith('data:audio/')) {
-          // If the MIME type is missing or incorrect, fix it
-          const base64Data = base64Audio.split(',')[1];
-          base64Audio = `data:audio/mpeg;base64,${base64Data}`;
-        }
-
-        // Update audiobook with voice audio only
-        await updateAudiobook(id as string, {
-          voice_id: selectedVoice,
-          audio_url: base64Audio,
-          status: 'completed',
-        });
-
-        // Navigate to audio effects for background selection
-        router.push({
-          pathname: '/audio',
-          params: {
-            id,
-            voiceAudio: base64Audio,
-          },
-        });
+      // Create the new text_content structure with word timings
+      const newTextContent = {
+        originalText,
+        alignment, // This contains the word timings
+        backgroundEffect: null,
       };
+
+      // Construct the data URL directly from the base64 string
+      const audioUrl = `data:audio/mpeg;base64,${audioBase64}`;
+
+      // Update audiobook with voice audio and the new text content
+      await updateAudiobook(id as string, {
+        voice_id: selectedVoice,
+        audio_url: audioUrl,
+        text_content: JSON.stringify(newTextContent) as any, // Save the rich text content
+        status: 'completed',
+      });
+
+      // Navigate to audio effects for background selection
+      router.push({
+        pathname: '/audio',
+        params: {
+          id,
+          voiceAudio: audioUrl,
+        },
+      });
     } catch (error: any) {
       Alert.alert('Error', error.message);
     } finally {
