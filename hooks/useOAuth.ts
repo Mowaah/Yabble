@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Alert } from 'react-native';
 import { signInWithGoogle, signInWithApple, signInWithFacebook, OAuthResult } from '../lib/oauth';
-import { debugOAuthConfig, testOAuthProvider, showRedirectUriInstructions, debugOAuthFlow } from '../lib/oauth-debug';
 
 export type OAuthProvider = 'google' | 'apple' | 'facebook';
 
@@ -14,19 +13,6 @@ export function useOAuth() {
     setLoadingProvider(provider);
 
     try {
-      // Debug calls have been commented out to simplify the sign-in flow.
-      // You can uncomment them if you need to diagnose issues in the future.
-      //
-      // await debugOAuthConfig();
-      // if (provider === 'google') {
-      //   showRedirectUriInstructions();
-      //   await debugOAuthFlow(provider);
-      // }
-      // const testResult = await testOAuthProvider(provider);
-      // if (testResult.error) {
-      //   console.error(`${provider} provider test failed:`, testResult.error);
-      // }
-
       let result: OAuthResult;
 
       switch (provider) {
