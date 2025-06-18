@@ -14,6 +14,17 @@ export async function getAudiobooks(userId: string) {
   return { data, error };
 }
 
+export async function getAudiobook(id: string) {
+  const { data, error } = await supabase.from('audiobooks').select('*').eq('id', id).single();
+
+  if (error) {
+    console.error('Error fetching audiobook:', error);
+    throw new Error(error.message);
+  }
+
+  return data;
+}
+
 export async function createAudiobook(audiobook: Tables['audiobooks']['Insert']) {
   const { data, error } = await supabase.from('audiobooks').insert(audiobook).select().single();
 
@@ -68,7 +79,6 @@ export async function getVoiceSettings(userId: string) {
 
   return { data, error };
 }
-
 export async function saveVoiceSettings(settings: Tables['voice_settings']['Insert']) {
   const { data, error } = await supabase.from('voice_settings').insert(settings).select().single();
 

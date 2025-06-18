@@ -12,18 +12,7 @@ import {
   Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import {
-  Play,
-  Pause,
-  Download,
-  Share2,
-  Trash2,
-  Heart,
-  Upload,
-  Clock,
-  Mic,
-  MoreHorizontal,
-} from 'lucide-react-native';
+import { Play, Pause, Download, Share2, Trash2, Heart, Upload, Clock, Mic, MoreHorizontal } from 'lucide-react-native';
 import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
 import Card from '../ui/Card';
@@ -134,9 +123,7 @@ export default function AudiobookCard({
 
         const backgroundEffectId = getBackgroundEffect();
         if (backgroundEffectId) {
-          const effect = mockAudioEffects.find(
-            (e) => e.id === backgroundEffectId
-          );
+          const effect = mockAudioEffects.find((e) => e.id === backgroundEffectId);
           if (effect?.previewUrl) {
             await audioEffects.loadBackgroundMusic(effect.previewUrl);
           }
@@ -174,18 +161,14 @@ export default function AudiobookCard({
       Platform.OS === 'web'
         ? window.confirm(`Are you sure you want to delete "${book.title}"?`)
         : await new Promise((resolve) => {
-            Alert.alert(
-              'Delete Audiobook',
-              `Are you sure you want to delete "${book.title}"?`,
-              [
-                { text: 'Cancel', onPress: () => resolve(false) },
-                {
-                  text: 'Delete',
-                  style: 'destructive',
-                  onPress: () => resolve(true),
-                },
-              ]
-            );
+            Alert.alert('Delete Audiobook', `Are you sure you want to delete "${book.title}"?`, [
+              { text: 'Cancel', onPress: () => resolve(false) },
+              {
+                text: 'Delete',
+                style: 'destructive',
+                onPress: () => resolve(true),
+              },
+            ]);
           });
 
     if (confirmed) {
@@ -285,9 +268,7 @@ export default function AudiobookCard({
                 {book.title}
               </Text>
               <View style={styles.metaRow}>
-                <Text style={styles.duration}>
-                  {formatDuration(book.duration)}
-                </Text>
+                <Text style={styles.duration}>{formatDuration(book.duration)}</Text>
                 <Text style={styles.separator}>•</Text>
                 <Text style={styles.voice}>{getVoiceName()}</Text>
               </View>
@@ -332,10 +313,7 @@ export default function AudiobookCard({
               ))}
 
               <Animated.View style={{ transform: [{ scale: favoriteScale }] }}>
-                <Pressable
-                  style={styles.favoriteButton}
-                  onPress={handleFavorite}
-                >
+                <Pressable style={styles.favoriteButton} onPress={handleFavorite}>
                   <Heart
                     size={22}
                     color={isFavorite ? Colors.error : Colors.gray[400]}
@@ -350,13 +328,9 @@ export default function AudiobookCard({
           {book.status === 'draft' && (
             <View style={styles.progressContainer}>
               <View style={styles.progressBar}>
-                <View
-                  style={[styles.progressFill, { width: `${getProgress()}%` }]}
-                />
+                <View style={[styles.progressFill, { width: `${getProgress()}%` }]} />
               </View>
-              <Text style={styles.progressText}>
-                {Math.round(getProgress())}%
-              </Text>
+              <Text style={styles.progressText}>{Math.round(getProgress())}%</Text>
             </View>
           )}
 
@@ -364,9 +338,7 @@ export default function AudiobookCard({
           <View style={styles.bottomActions}>
             <View style={styles.leftActions}>
               {book.status === 'completed' && book.audio_url && (
-                <Animated.View
-                  style={{ transform: [{ scale: playButtonScale }] }}
-                >
+                <Animated.View style={{ transform: [{ scale: playButtonScale }] }}>
                   <Pressable
                     style={[
                       styles.playButton,
@@ -388,10 +360,7 @@ export default function AudiobookCard({
               )}
             </View>
 
-            <Pressable
-              style={styles.moreButton}
-              onPress={() => setShowActionsMenu(true)}
-            >
+            <Pressable style={styles.moreButton} onPress={() => setShowActionsMenu(true)}>
               <MoreHorizontal size={16} color={Colors.gray[600]} />
             </Pressable>
           </View>
@@ -405,51 +374,34 @@ export default function AudiobookCard({
         onRequestClose={() => setShowActionsMenu(false)}
         animationType="fade"
       >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setShowActionsMenu(false)}
-        >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowActionsMenu(false)}>
           <View style={styles.actionsMenu}>
             {book.status === 'completed' && (
-              <Pressable
-                style={styles.menuItem}
-                onPress={() => handleActionPress(onPublishToHub!)}
-              >
+              <Pressable style={styles.menuItem} onPress={() => handleActionPress(onPublishToHub!)}>
                 <Upload size={16} color={Colors.gray[700]} />
                 <Text style={styles.menuText}>Publish to Hub</Text>
               </Pressable>
             )}
 
             {book.status === 'completed' && (
-              <Pressable
-                style={styles.menuItem}
-                onPress={() => handleActionPress(onDownload!)}
-              >
+              <Pressable style={styles.menuItem} onPress={() => handleActionPress(onDownload!)}>
                 <Download size={16} color={Colors.gray[700]} />
                 <Text style={styles.menuText}>Download</Text>
               </Pressable>
             )}
 
-            <Pressable
-              style={styles.menuItem}
-              onPress={() => handleActionPress(onShare!)}
-            >
+            <Pressable style={styles.menuItem} onPress={() => handleActionPress(onShare!)}>
               <Share2 size={16} color={Colors.gray[700]} />
               <Text style={styles.menuText}>Share</Text>
             </Pressable>
 
-            <Pressable
-              style={[styles.menuItem, styles.deleteMenuItem]}
-              onPress={handleDelete}
-            >
+            <Pressable style={[styles.menuItem, styles.deleteMenuItem]} onPress={handleDelete}>
               {isDeleting ? (
                 <ActivityIndicator size="small" color={Colors.error} />
               ) : (
                 <Trash2 size={16} color={Colors.error} />
               )}
-              <Text style={[styles.menuText, { color: Colors.error }]}>
-                {isDeleting ? 'Deleting...' : 'Delete'}
-              </Text>
+              <Text style={[styles.menuText, { color: Colors.error }]}>{isDeleting ? 'Deleting...' : 'Delete'}</Text>
             </Pressable>
           </View>
         </Pressable>

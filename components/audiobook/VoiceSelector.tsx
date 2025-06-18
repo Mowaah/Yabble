@@ -1,14 +1,5 @@
 import React, { useState } from 'react';
-import {
-  StyleSheet,
-  Text,
-  View,
-  FlatList,
-  Pressable,
-  Animated,
-  Dimensions,
-  ActivityIndicator,
-} from 'react-native';
+import { StyleSheet, Text, View, FlatList, Pressable, Animated, Dimensions, ActivityIndicator } from 'react-native';
 import { Play, Pause, Sparkles } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '../../constants/Colors';
@@ -111,22 +102,20 @@ export default function VoiceSelector({
         setSound(null);
 
         // Stop all animations
-        Object.values(animatedValues).forEach(
-          ({ gradientAnimation, pulseAnimation }) => {
-            gradientAnimation.stopAnimation();
-            pulseAnimation.stopAnimation();
-            Animated.timing(gradientAnimation, {
-              toValue: 0,
-              duration: 300,
-              useNativeDriver: false,
-            }).start();
-            Animated.timing(pulseAnimation, {
-              toValue: 1,
-              duration: 300,
-              useNativeDriver: true,
-            }).start();
-          }
-        );
+        Object.values(animatedValues).forEach(({ gradientAnimation, pulseAnimation }) => {
+          gradientAnimation.stopAnimation();
+          pulseAnimation.stopAnimation();
+          Animated.timing(gradientAnimation, {
+            toValue: 0,
+            duration: 300,
+            useNativeDriver: false,
+          }).start();
+          Animated.timing(pulseAnimation, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: true,
+          }).start();
+        });
 
         setPlayingVoiceId(null);
         setLoadingVoiceId(null);
@@ -258,19 +247,12 @@ export default function VoiceSelector({
     };
   }, [voiceSettings]);
 
-  const renderVoiceItem = ({
-    item,
-  }: {
-    item: VoiceSelectorProps['voices'][0];
-  }) => {
+  const renderVoiceItem = ({ item }: { item: VoiceSelectorProps['voices'][0] }) => {
     const isSelected = item.voice_id === selectedVoiceId;
     const isPlaying = item.voice_id === playingVoiceId;
     const isLoading = item.voice_id === loadingVoiceId;
     const animations = animatedValues[item.voice_id];
-    const gradientColors = generateGradientColors(
-      item.name,
-      item.gender || 'female'
-    );
+    const gradientColors = generateGradientColors(item.name, item.gender || 'female');
 
     if (!animations) return null;
 
@@ -281,12 +263,7 @@ export default function VoiceSelector({
           onPress={() => handleVoicePress(item.voice_id)}
         >
           {/* Animated Gradient Background with Play Button */}
-          <Animated.View
-            style={[
-              styles.gradientContainer,
-              { transform: [{ scale: animations.pulseAnimation }] },
-            ]}
-          >
+          <Animated.View style={[styles.gradientContainer, { transform: [{ scale: animations.pulseAnimation }] }]}>
             <LinearGradient
               colors={gradientColors as any}
               start={{ x: 0, y: 0 }}
@@ -338,9 +315,7 @@ export default function VoiceSelector({
                   )}
                 </Pressable>
               ) : (
-                <Text style={styles.voiceInitial}>
-                  {item.name.charAt(0).toUpperCase()}
-                </Text>
+                <Text style={styles.voiceInitial}>{item.name.charAt(0).toUpperCase()}</Text>
               )}
 
               {/* Selected Badge */}
@@ -353,10 +328,7 @@ export default function VoiceSelector({
           </Animated.View>
 
           {/* Voice Name */}
-          <Text
-            style={[styles.voiceName, isSelected && styles.selectedVoiceName]}
-            numberOfLines={1}
-          >
+          <Text style={[styles.voiceName, isSelected && styles.selectedVoiceName]} numberOfLines={1}>
             {item.name}
           </Text>
         </Pressable>
@@ -376,9 +348,7 @@ export default function VoiceSelector({
             <View style={styles.categoryHeader}>
               <Text style={styles.categoryTitle}>{category.title}</Text>
               <View style={styles.categoryBadge}>
-                <Text style={styles.categoryBadgeText}>
-                  {categoryVoices.length} voices
-                </Text>
+                <Text style={styles.categoryBadgeText}>{categoryVoices.length} voices</Text>
               </View>
             </View>
 

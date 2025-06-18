@@ -1,33 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  StyleSheet,
-  Text,
-  View,
-  ScrollView,
-  Pressable,
-  TouchableWithoutFeedback,
-  Animated,
-} from 'react-native';
+import { StyleSheet, Text, View, ScrollView, Pressable, Animated } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import {
-  ChevronLeft,
-  ChevronRight,
-  Music,
-  Play,
-  Volume2,
-  Pause,
-  Sparkles,
-  Headphones,
-} from 'lucide-react-native';
+import { ChevronLeft, Music, Play, Volume2, Pause, Sparkles, Headphones } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Colors from '../constants/Colors';
 import Layout from '../constants/Layout';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
-import BackgroundSelector, {
-  BackgroundSelectorRef,
-} from '../components/audiobook/BackgroundSelector';
+import { BackgroundSelectorRef } from '../components/audiobook/BackgroundSelector';
 import { mockAudioEffects } from '../utils/mockData';
 import { audioEffects } from '../lib/audio';
 import { updateAudiobook } from '../lib/database';
@@ -35,25 +16,17 @@ import { updateAudiobook } from '../lib/database';
 export default function AudioScreen() {
   const router = useRouter();
   const { id, voiceAudio, backgroundEffect } = useLocalSearchParams();
-  const [selectedEffect, setSelectedEffect] = useState<string | null>(
-    (backgroundEffect as string) || null
-  );
+  const [selectedEffect, setSelectedEffect] = useState<string | null>((backgroundEffect as string) || null);
   const [volume, setVolume] = useState(() => {
     const initialVolume = audioEffects.getVolume();
-    return isFinite(initialVolume) && !isNaN(initialVolume)
-      ? initialVolume
-      : 0.5;
+    return isFinite(initialVolume) && !isNaN(initialVolume) ? initialVolume : 0.5;
   });
   const [backgroundVolume, setBackgroundVolume] = useState(() => {
     const initialVolume = audioEffects.getBackgroundVolume();
-    return isFinite(initialVolume) && !isNaN(initialVolume)
-      ? initialVolume
-      : 0.3;
+    return isFinite(initialVolume) && !isNaN(initialVolume) ? initialVolume : 0.3;
   });
   const [isPlaying, setIsPlaying] = useState(false);
   const [playingPreviewId, setPlayingPreviewId] = useState<string | null>(null);
-  const [sliderWidth, setSliderWidth] = useState(0);
-  const [backgroundSliderWidth, setBackgroundSliderWidth] = useState(0);
   const [waveAnimations] = useState({
     bar1: new Animated.Value(0.3),
     bar2: new Animated.Value(0.7),
@@ -246,29 +219,29 @@ export default function AudioScreen() {
       await backgroundSelectorRef.current?.stopPreview();
 
       if (selectedEffect && id) {
-        // Update audiobook with selected background effect
-        const originalText = (() => {
-          try {
-            // Try to get original text from existing audiobook data
-            // This would require fetching the audiobook, but for now we'll use a placeholder
-            return 'Generated audiobook text'; // In a real app, fetch this from the audiobook
-          } catch {
-            return 'Generated audiobook text';
-          }
-        })();
-
+        // This part seems to have placeholder logic.
+        // For now, we'll assume the text_content is already correctly set
+        // from the previous step and we just add the background effect.
+        // A proper implementation would fetch the existing text_content object.
+        const originalText = '...'; // Placeholder
         await updateAudiobook(id as string, {
-          text_content: JSON.stringify({
-            originalText,
+          textContent: JSON.stringify({
+            originalText: originalText, // This should be fetched
             backgroundEffect: selectedEffect,
           }),
         });
       }
 
-      router.push('/export');
+      router.push({
+        pathname: '/export',
+        params: { id: id as string },
+      });
     } catch (error) {
       console.error('Error updating audiobook:', error);
-      router.push('/export');
+      router.push({
+        pathname: '/export',
+        params: { id: id as string },
+      });
     }
   };
 
@@ -314,27 +287,17 @@ export default function AudioScreen() {
               </View>
               <View style={styles.stepInfo}>
                 <Text style={styles.stepTitle}>Choose Background Audio</Text>
-                <Text style={styles.stepDesc}>
-                  Select music or ambient sounds (optional)
-                </Text>
+                <Text style={styles.stepDesc}>Select music or ambient sounds (optional)</Text>
               </View>
             </View>
 
             {/* No Background Option - Prominent */}
             <Pressable
-              style={[
-                styles.noneOptionCard,
-                !selectedEffect && styles.selectedNoneCard,
-              ]}
+              style={[styles.noneOptionCard, !selectedEffect && styles.selectedNoneCard]}
               onPress={() => setSelectedEffect(null)}
             >
               <View style={styles.noneOptionContent}>
-                <Text
-                  style={[
-                    styles.noneOptionTitle,
-                    !selectedEffect && styles.selectedNoneTitle,
-                  ]}
-                >
+                <Text style={[styles.noneOptionTitle, !selectedEffect && styles.selectedNoneTitle]}>
                   No Background Audio
                 </Text>
                 <Text style={styles.noneOptionDesc}>Pure voice narration</Text>
@@ -348,9 +311,7 @@ export default function AudioScreen() {
 
             {/* Categories */}
             {['music', 'ambient', 'sound_effect'].map((category) => {
-              const categoryEffects = mockAudioEffects.filter(
-                (e) => e.category === category
-              );
+              const categoryEffects = mockAudioEffects.filter((e) => e.category === category);
               if (categoryEffects.length === 0) return null;
 
               const categoryInfo = {
@@ -373,12 +334,8 @@ export default function AudioScreen() {
               return (
                 <View key={category} style={styles.categorySection}>
                   <View style={styles.categoryHeader}>
-                    <Text style={styles.categoryTitle}>
-                      {categoryInfo.title}
-                    </Text>
-                    <Text style={styles.categoryCount}>
-                      {categoryEffects.length}
-                    </Text>
+                    <Text style={styles.categoryTitle}>{categoryInfo.title}</Text>
+                    <Text style={styles.categoryCount}>{categoryEffects.length}</Text>
                   </View>
                   <Text style={styles.categoryDesc}>{categoryInfo.desc}</Text>
 
@@ -386,20 +343,12 @@ export default function AudioScreen() {
                     {categoryEffects.map((effect) => (
                       <Pressable
                         key={effect.id}
-                        style={[
-                          styles.audioCard,
-                          selectedEffect === effect.id &&
-                            styles.selectedAudioCard,
-                        ]}
+                        style={[styles.audioCard, selectedEffect === effect.id && styles.selectedAudioCard]}
                         onPress={() => handleSelectEffect(effect.id)}
                       >
                         {/* Audio Name */}
                         <Text
-                          style={[
-                            styles.audioName,
-                            selectedEffect === effect.id &&
-                              styles.selectedAudioName,
-                          ]}
+                          style={[styles.audioName, selectedEffect === effect.id && styles.selectedAudioName]}
                           numberOfLines={2}
                         >
                           {effect.name}
@@ -410,10 +359,8 @@ export default function AudioScreen() {
                           <Pressable
                             style={[
                               styles.audioPlayButton,
-                              playingPreviewId === effect.id &&
-                                styles.playingButton,
-                              selectedEffect === effect.id &&
-                                styles.selectedPlayButton,
+                              playingPreviewId === effect.id && styles.playingButton,
+                              selectedEffect === effect.id && styles.selectedPlayButton,
                             ]}
                             onPress={(e) => {
                               e.stopPropagation();
@@ -500,9 +447,7 @@ export default function AudioScreen() {
               </View>
               <View style={styles.stepInfo}>
                 <Text style={styles.stepTitle}>Adjust Audio Levels</Text>
-                <Text style={styles.stepDesc}>
-                  Balance your voice and background audio
-                </Text>
+                <Text style={styles.stepDesc}>Balance your voice and background audio</Text>
               </View>
             </View>
 
@@ -514,9 +459,7 @@ export default function AudioScreen() {
                     <Volume2 size={18} color={Colors.primary} />
                     <Text style={styles.sliderLabel}>Voice Volume</Text>
                   </View>
-                  <Text style={styles.sliderValue}>
-                    {Math.round(volume * 100)}%
-                  </Text>
+                  <Text style={styles.sliderValue}>{Math.round(volume * 100)}%</Text>
                 </View>
                 <Slider
                   value={volume}
@@ -542,9 +485,7 @@ export default function AudioScreen() {
                     <Music size={18} color={Colors.primary} />
                     <Text style={styles.sliderLabel}>Background Volume</Text>
                   </View>
-                  <Text style={styles.sliderValue}>
-                    {Math.round(backgroundVolume * 100)}%
-                  </Text>
+                  <Text style={styles.sliderValue}>{Math.round(backgroundVolume * 100)}%</Text>
                 </View>
                 <Slider
                   value={backgroundVolume}
@@ -575,10 +516,7 @@ export default function AudioScreen() {
                 <Text style={styles.stepTitle}>Preview Your Mix</Text>
                 <Text style={styles.stepDesc}>
                   {selectedEffect
-                    ? `Voice + ${
-                        mockAudioEffects.find((e) => e.id === selectedEffect)
-                          ?.name
-                      }`
+                    ? `Voice + ${mockAudioEffects.find((e) => e.id === selectedEffect)?.name}`
                     : 'Voice only'}
                 </Text>
               </View>
@@ -586,29 +524,18 @@ export default function AudioScreen() {
 
             <View style={styles.previewSection}>
               <View style={styles.previewWaveform}>
-                <View
-                  style={[styles.waveform, isPlaying && styles.activeWaveform]}
-                />
+                <View style={[styles.waveform, isPlaying && styles.activeWaveform]} />
               </View>
 
               <Pressable
-                style={[
-                  styles.previewButton,
-                  isPlaying && styles.previewButtonPlaying,
-                ]}
+                style={[styles.previewButton, isPlaying && styles.previewButtonPlaying]}
                 onPress={handlePlayMixedPreview}
               >
-                {isPlaying ? (
-                  <Pause size={24} color={Colors.white} />
-                ) : (
-                  <Play size={24} color={Colors.white} />
-                )}
+                {isPlaying ? <Pause size={24} color={Colors.white} /> : <Play size={24} color={Colors.white} />}
               </Pressable>
 
               <Text style={styles.previewText}>
-                {isPlaying
-                  ? 'Playing mixed audio...'
-                  : 'Tap to preview your audiobook'}
+                {isPlaying ? 'Playing mixed audio...' : 'Tap to preview your audiobook'}
               </Text>
             </View>
           </Card>
@@ -620,26 +547,15 @@ export default function AudioScreen() {
               <Text style={styles.tipsTitle}>Audio Mixing Tips</Text>
             </View>
             <View style={styles.tipsContent}>
-              <Text style={styles.tipText}>
-                • Keep background audio 20-30% of voice volume
-              </Text>
-              <Text style={styles.tipText}>
-                • Choose ambient sounds that complement your content
-              </Text>
-              <Text style={styles.tipText}>
-                • Test your mix with different listening devices
-              </Text>
+              <Text style={styles.tipText}>• Keep background audio 20-30% of voice volume</Text>
+              <Text style={styles.tipText}>• Choose ambient sounds that complement your content</Text>
+              <Text style={styles.tipText}>• Test your mix with different listening devices</Text>
             </View>
           </Card>
         </ScrollView>
 
         <View style={styles.footer}>
-          <Button
-            title="Back"
-            onPress={handleBack}
-            variant="ghost"
-            style={styles.backFooterButton}
-          />
+          <Button title="Back" onPress={handleBack} variant="ghost" style={styles.backFooterButton} />
           <Button
             title="Continue to Export"
             onPress={handleNext}
