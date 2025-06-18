@@ -19,7 +19,7 @@ import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import { signInWithEmail } from '../../lib/auth';
 import { useOAuth } from '../../hooks/useOAuth';
-import { GoogleIcon, FacebookIcon, AppleIcon } from '../../components/ui/SocialIcons';
+import { GoogleIcon, FacebookIcon } from '../../components/ui/SocialIcons';
 import Logo from '../../components/ui/Logo';
 
 export default function SignInScreen() {
@@ -32,13 +32,7 @@ export default function SignInScreen() {
   const [isLoading, setIsLoading] = useState(false);
 
   // OAuth hook
-  const {
-    isLoading: isOAuthLoading,
-    loadingProvider,
-    signInWithGoogle,
-    signInWithApple,
-    signInWithFacebook,
-  } = useOAuth();
+  const { isLoading: isOAuthLoading, loadingProvider, signInWithGoogle, signInWithFacebook } = useOAuth();
 
   // Dismiss keyboard when tapping outside
   const dismissKeyboard = () => {
@@ -83,14 +77,11 @@ export default function SignInScreen() {
     }
   };
 
-  const handleSocialSignIn = async (provider: 'google' | 'apple' | 'facebook') => {
+  const handleSocialSignIn = async (provider: 'google' | 'facebook') => {
     try {
       switch (provider) {
         case 'google':
           await signInWithGoogle();
-          break;
-        case 'apple':
-          await signInWithApple();
           break;
         case 'facebook':
           await signInWithFacebook();
@@ -193,19 +184,7 @@ export default function SignInScreen() {
                   {loadingProvider === 'google' ? (
                     <ActivityIndicator color={Colors.primary} size="small" />
                   ) : (
-                    <GoogleIcon size={20} />
-                  )}
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.socialButton, loadingProvider === 'apple' && styles.socialButtonLoading]}
-                  onPress={() => handleSocialSignIn('apple')}
-                  disabled={isOAuthLoading}
-                >
-                  {loadingProvider === 'apple' ? (
-                    <ActivityIndicator color={Colors.primary} size="small" />
-                  ) : (
-                    <AppleIcon size={20} color={Colors.primary} />
+                    <GoogleIcon size={25} />
                   )}
                 </TouchableOpacity>
 
@@ -217,7 +196,7 @@ export default function SignInScreen() {
                   {loadingProvider === 'facebook' ? (
                     <ActivityIndicator color={Colors.primary} size="small" />
                   ) : (
-                    <FacebookIcon size={20} />
+                    <FacebookIcon size={25} />
                   )}
                 </TouchableOpacity>
               </View>
@@ -336,7 +315,7 @@ const styles = StyleSheet.create({
   },
   socialContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     marginBottom: Layout.spacing.lg,
     paddingHorizontal: Layout.spacing.md,
   },
@@ -349,14 +328,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: Colors.gray[200],
+    marginHorizontal: Layout.spacing.md,
   },
   socialButtonLoading: {
     opacity: 0.7,
-  },
-  socialButtonText: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Colors.primary,
   },
   linksContainer: {
     flexDirection: 'row',

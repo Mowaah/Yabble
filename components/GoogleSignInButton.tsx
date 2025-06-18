@@ -1,7 +1,6 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, Alert, View } from 'react-native';
 import { signInWithGoogle } from '../lib/oauth';
-import Colors from '../constants/Colors';
 
 interface GoogleSignInButtonProps {
   onSuccess?: () => void;
