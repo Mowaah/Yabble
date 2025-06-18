@@ -1,8 +1,5 @@
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
-import * as QueryParams from 'expo-auth-session/build/QueryParams';
-import { Platform } from 'react-native';
-import Constants from 'expo-constants';
 import { supabase } from './supabase';
 
 // Conditionally import Google Sign-In (only available in development builds)
@@ -27,119 +24,68 @@ try {
 // Required for web support
 WebBrowser.maybeCompleteAuthSession();
 
-// OAuth Configuration - Handle Expo Go vs standalone app (for other providers)
-const getRedirectUri = () => {
-  // Check if running in Expo Go
-  const isExpoGo = Constants.appOwnership === 'expo';
-
-  if (isExpoGo) {
-    // In Expo Go, use the dynamically generated URL
-    return AuthSession.makeRedirectUri({
-      path: 'auth',
-    });
-  } else {
-    // In standalone app, use custom scheme
-    return AuthSession.makeRedirectUri({
-      scheme: 'yabble',
-      path: 'auth',
-    });
-  }
-};
-
-const redirectUri = getRedirectUri();
-
-console.log('OAuth Redirect URI:', redirectUri);
-console.log('Running in Expo Go:', Constants.appOwnership === 'expo');
+// OAuth Configuration
+const redirectUri = AuthSession.makeRedirectUri({
+  // In a development build, a direct deep link is used.
+  // The `useProxy` option is for Expo Go on a physical device.
+  scheme: 'yabble',
+  path: 'auth',
+});
 
 export interface OAuthResult {
   data?: any;
   error?: Error;
 }
 
-// Create session from URL (for deep linking - other providers)
-const createSessionFromUrl = async (url: string) => {
-  const { params, errorCode } = QueryParams.getQueryParams(url);
-
-  if (errorCode) throw new Error(errorCode);
-
-  const { access_token, refresh_token } = params;
-
-  if (!access_token) return;
-
-  const { data, error } = await supabase.auth.setSession({
-    access_token,
-    refresh_token,
-  });
-
-  if (error) throw error;
-  return data.session;
+// Get Supabase URL from environment
+const getSupabaseUrl = () => {
+  const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  if (!url) {
+    throw new Error('EXPO_PUBLIC_SUPABASE_URL is not set.');
+  }
+  return url;
 };
 
 /**
- * Sign in with Google using Native Sign-In (when available) or OAuth (Expo Go)
+ * Sign in with Google using the correct native flow.
  */
 export async function signInWithGoogle(): Promise<OAuthResult> {
   try {
-    const isExpoGo = Constants.appOwnership === 'expo';
+    const supabaseUrl = getSupabaseUrl();
+    const url = `${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${redirectUri}`;
 
-    // Use native Google Sign-In if available (development/production builds)
-    if (GoogleSignin && !isExpoGo) {
-      console.log('Using native Google Sign-In');
+    const authResponse = await WebBrowser.openAuthSessionAsync(url, redirectUri, {
+      showInRecents: true,
+    });
 
-      // Check if Google Play Services are available (Android only)
-      if (Platform.OS === 'android') {
-        await GoogleSignin.hasPlayServices();
+    if (authResponse.type === 'success') {
+      const { url: responseUrl } = authResponse;
+      // Supabase sends the session details in the URL fragment
+      const params = new URLSearchParams(responseUrl.split('#')[1]);
+      const accessToken = params.get('access_token');
+      const refreshToken = params.get('refresh_token');
+
+      if (!accessToken || !refreshToken) {
+        return { error: new Error('No session found in the redirect URL.') };
       }
 
-      // Sign in with Google
-      const userInfo = await GoogleSignin.signIn();
-
-      if (userInfo.data?.idToken) {
-        // Use the ID token with Supabase
-        const { data, error } = await supabase.auth.signInWithIdToken({
-          provider: 'google',
-          token: userInfo.data.idToken,
-        });
-
-        if (error) throw error;
-        return { data };
-      } else {
-        throw new Error('No ID token received from Google Sign-In');
-      }
-    } else {
-      // Fall back to OAuth flow for Expo Go
-      console.log('Using OAuth flow (Expo Go)');
-
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: redirectUri,
-          skipBrowserRedirect: true,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          },
-        },
+      const { data, error } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
       });
 
-      if (error) throw error;
-
-      // Open the OAuth URL in WebBrowser
-      const result = await WebBrowser.openAuthSessionAsync(data?.url ?? '', redirectUri);
-
-      if (result.type === 'success') {
-        const { url } = result;
-        const session = await createSessionFromUrl(url);
-        return { data: session };
+      if (error) {
+        return { error };
       }
-
-      if (result.type === 'cancel') {
-        throw new Error('OAuth authentication was cancelled');
-      }
-
-      throw new Error('OAuth authentication failed');
+      return { data };
     }
-  } catch (error: any) {
+
+    if (authResponse.type === 'cancel' || authResponse.type === 'dismiss') {
+      return { error: new Error('Authentication was cancelled by the user.') };
+    }
+
+    return { error: new Error('An unknown error occurred during authentication.') };
+  } catch (error) {
     console.error('Google OAuth error:', error);
 
     // Handle specific Google Sign-In errors
@@ -160,29 +106,39 @@ export async function signInWithGoogle(): Promise<OAuthResult> {
  */
 export async function signInWithApple(): Promise<OAuthResult> {
   try {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'apple',
-      options: {
-        redirectTo: redirectUri,
-        skipBrowserRedirect: true,
-      },
+    const supabaseUrl = getSupabaseUrl();
+    const url = `${supabaseUrl}/auth/v1/authorize?provider=apple&redirect_to=${redirectUri}`;
+
+    const authResponse = await WebBrowser.openAuthSessionAsync(url, redirectUri, {
+      showInRecents: true,
     });
 
-    if (error) throw error;
+    if (authResponse.type === 'success') {
+      const { url: responseUrl } = authResponse;
+      const params = new URLSearchParams(responseUrl.split('#')[1]);
+      const accessToken = params.get('access_token');
+      const refreshToken = params.get('refresh_token');
 
-    const result = await WebBrowser.openAuthSessionAsync(data?.url ?? '', redirectUri);
+      if (!accessToken || !refreshToken) {
+        return { error: new Error('No session found in the redirect URL.') };
+      }
 
-    if (result.type === 'success') {
-      const { url } = result;
-      const session = await createSessionFromUrl(url);
-      return { data: session };
+      const { data, error } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+
+      if (error) {
+        return { error };
+      }
+      return { data };
     }
 
-    if (result.type === 'cancel') {
-      throw new Error('OAuth authentication was cancelled');
+    if (authResponse.type === 'cancel' || authResponse.type === 'dismiss') {
+      return { error: new Error('Authentication was cancelled by the user.') };
     }
 
-    throw new Error('OAuth authentication failed');
+    return { error: new Error('An unknown error occurred during authentication.') };
   } catch (error) {
     console.error('Apple OAuth error:', error);
     return { error: error as Error };
@@ -194,86 +150,41 @@ export async function signInWithApple(): Promise<OAuthResult> {
  */
 export async function signInWithFacebook(): Promise<OAuthResult> {
   try {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'facebook',
-      options: {
-        redirectTo: redirectUri,
-        skipBrowserRedirect: true,
-        scopes: 'email',
-      },
+    const supabaseUrl = getSupabaseUrl();
+    const url = `${supabaseUrl}/auth/v1/authorize?provider=facebook&redirect_to=${redirectUri}`;
+
+    const authResponse = await WebBrowser.openAuthSessionAsync(url, redirectUri, {
+      showInRecents: true,
     });
 
-    if (error) throw error;
+    if (authResponse.type === 'success') {
+      const { url: responseUrl } = authResponse;
+      const params = new URLSearchParams(responseUrl.split('#')[1]);
+      const accessToken = params.get('access_token');
+      const refreshToken = params.get('refresh_token');
 
-    const result = await WebBrowser.openAuthSessionAsync(data?.url ?? '', redirectUri);
+      if (!accessToken || !refreshToken) {
+        return { error: new Error('No session found in the redirect URL.') };
+      }
 
-    if (result.type === 'success') {
-      const { url } = result;
-      const session = await createSessionFromUrl(url);
-      return { data: session };
+      const { data, error } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+
+      if (error) {
+        return { error };
+      }
+      return { data };
     }
 
-    if (result.type === 'cancel') {
-      throw new Error('OAuth authentication was cancelled');
+    if (authResponse.type === 'cancel' || authResponse.type === 'dismiss') {
+      return { error: new Error('Authentication was cancelled by the user.') };
     }
 
-    throw new Error('OAuth authentication failed');
+    return { error: new Error('An unknown error occurred during authentication.') };
   } catch (error) {
     console.error('Facebook OAuth error:', error);
     return { error: error as Error };
   }
-}
-
-/**
- * Handle OAuth callback URL (mainly for web)
- */
-export async function handleOAuthCallback(url: string): Promise<OAuthResult> {
-  try {
-    // For web, we can use the session from URL
-    if (Platform.OS === 'web' && url.includes('#access_token')) {
-      const urlParams = new URLSearchParams(url.split('#')[1]);
-      const accessToken = urlParams.get('access_token');
-      const refreshToken = urlParams.get('refresh_token');
-
-      if (accessToken) {
-        const { data, error } = await supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken || '',
-        });
-
-        if (error) throw error;
-        return { data };
-      }
-    }
-
-    // For mobile deep links
-    if (url.includes('access_token')) {
-      const urlParams = new URLSearchParams(url.split('?')[1] || url.split('#')[1]);
-      const accessToken = urlParams.get('access_token');
-      const refreshToken = urlParams.get('refresh_token');
-
-      if (accessToken) {
-        const { data, error } = await supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken || '',
-        });
-
-        if (error) throw error;
-        return { data };
-      }
-    }
-
-    throw new Error('No valid session found in callback URL');
-  } catch (error) {
-    console.error('OAuth callback error:', error);
-    return { error: error as Error };
-  }
-}
-
-/**
- * Get OAuth redirect URL for a provider
- */
-export function getOAuthRedirectUrl(provider: 'google' | 'apple' | 'facebook'): string {
-  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-  return `${supabaseUrl}/auth/v1/authorize?provider=${provider}&redirect_to=${encodeURIComponent(redirectUri)}`;
 }
