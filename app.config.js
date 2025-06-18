@@ -10,7 +10,7 @@ export default ({ config }) => {
     version: config.version || '1.0.0',
     orientation: config.orientation || 'portrait',
     icon: config.icon || './assets/images/icon.png',
-    scheme: config.scheme || 'myapp',
+    scheme: config.scheme || 'yabble',
     userInterfaceStyle: config.userInterfaceStyle || 'automatic',
     splash: {
       ...(config.splash || {}),
@@ -28,24 +28,21 @@ export default ({ config }) => {
       supportsTablet: config.ios?.supportsTablet || true,
       // You might need to add `bundleIdentifier` here for iOS builds later
       bundleIdentifier: config.ios?.bundleIdentifier || 'com.yabble.app',
+      infoPlist: {
+        ...(config.ios?.infoPlist || {}),
+        ITSAppUsesNonExemptEncryption: false,
+      },
     },
     android: {
       ...(config.android || {}),
       adaptiveIcon: {
         ...(config.android?.adaptiveIcon || {}),
-        foregroundImage:
-          config.android?.adaptiveIcon?.foregroundImage ||
-          './assets/images/icon.png',
-        backgroundColor:
-          config.android?.adaptiveIcon?.backgroundColor || '#FFFFFF',
+        foregroundImage: config.android?.adaptiveIcon?.foregroundImage || './assets/images/icon.png',
+        backgroundColor: config.android?.adaptiveIcon?.backgroundColor || '#FFFFFF',
       },
-      package: config.android?.package || intendedPackageName, // Set the package name
+      package: 'com.yabble.app', // Set the package name
       permissions: Array.from(
-        new Set([
-          ...(config.android?.permissions || []),
-          'READ_EXTERNAL_STORAGE',
-          'WRITE_EXTERNAL_STORAGE',
-        ])
+        new Set([...(config.android?.permissions || []), 'READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE'])
       ),
     },
     web: {
@@ -54,7 +51,16 @@ export default ({ config }) => {
       output: config.web?.output || 'static',
       favicon: config.web?.favicon || './assets/images/favicon.png',
     },
-    plugins: config.plugins || ['expo-router', 'expo-font'],
+    plugins: config.plugins || [
+      'expo-router',
+      'expo-font',
+      [
+        '@react-native-google-signin/google-signin',
+        {
+          iosUrlScheme: 'com.googleusercontent.apps.939237185009-ihdc60udhgeose7sq5epksvajd25dsm6',
+        },
+      ],
+    ],
     experiments: {
       ...(config.experiments || {}),
       typedRoutes: config.experiments?.typedRoutes || true,

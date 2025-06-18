@@ -19,6 +19,7 @@ import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import { signUpWithEmail } from '../../lib/auth';
 import Logo from '../../components/ui/Logo';
+import CustomAlert from '../../components/ui/CustomAlert';
 
 export default function SignUpScreen() {
   const router = useRouter();
@@ -30,6 +31,7 @@ export default function SignUpScreen() {
   const [passwordError, setPasswordError] = useState('');
   const [confirmPasswordError, setConfirmPasswordError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
 
   // Dismiss keyboard when tapping outside
   const dismissKeyboard = () => {
@@ -74,11 +76,9 @@ export default function SignUpScreen() {
 
     setIsLoading(true);
     try {
-      const { error: signUpError } = await signUpWithEmail(
-        email.trim(),
-        password
-      );
+      const { error: signUpError } = await signUpWithEmail(email.trim(), password);
       if (signUpError) throw signUpError;
+      setModalVisible(true); // Show custom alert on success
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -88,29 +88,20 @@ export default function SignUpScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
+      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView
           contentContainerStyle={styles.scrollContainer}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <TouchableOpacity
-            style={styles.touchableContainer}
-            activeOpacity={1}
-            onPress={dismissKeyboard}
-          >
+          <TouchableOpacity style={styles.touchableContainer} activeOpacity={1} onPress={dismissKeyboard}>
             {/* Header */}
             <View style={styles.header}>
               <View style={styles.logoContainer}>
                 <Logo width={100} height={100} style={styles.logoImage} />
               </View>
               <Text style={styles.title}>Create Account</Text>
-              <Text style={styles.subtitle}>
-                Join your AI audiobook library
-              </Text>
+              <Text style={styles.subtitle}>Join your AI audiobook library</Text>
             </View>
 
             {/* Form */}
@@ -183,28 +174,16 @@ export default function SignUpScreen() {
               <Button
                 title={isLoading ? 'Creating Account...' : 'Create Account'}
                 onPress={handleSignUp}
-                disabled={
-                  isLoading ||
-                  !email.trim() ||
-                  !password.trim() ||
-                  !confirmPassword.trim()
-                }
+                disabled={isLoading || !email.trim() || !password.trim() || !confirmPassword.trim()}
                 icon={
-                  isLoading ? (
-                    <ActivityIndicator color="white" size="small" />
-                  ) : (
-                    <UserPlus size={20} color="white" />
-                  )
+                  isLoading ? <ActivityIndicator color="white" size="small" /> : <UserPlus size={20} color="white" />
                 }
                 style={styles.signUpButton}
               />
 
               {/* Links */}
               <View style={styles.linksContainer}>
-                <TouchableOpacity
-                  style={styles.linkButton}
-                  onPress={() => router.replace('/sign-in')}
-                >
+                <TouchableOpacity style={styles.linkButton} onPress={() => router.replace('/sign-in')}>
                   <Text style={styles.linkText}>Already have an account?</Text>
                 </TouchableOpacity>
               </View>
@@ -212,6 +191,17 @@ export default function SignUpScreen() {
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <CustomAlert
+        visible={modalVisible}
+        title="Check Your Email"
+        message="We sent a confirmation link to your email. Please click the link to complete your sign-up."
+        buttonText="OK"
+        onClose={() => {
+          setModalVisible(false);
+          router.replace('/sign-in');
+        }}
+      />
     </SafeAreaView>
   );
 }

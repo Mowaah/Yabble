@@ -1,4 +1,10 @@
 import { auth } from './supabase';
+import * as AuthSession from 'expo-auth-session';
+
+const redirectUri = AuthSession.makeRedirectUri({
+  scheme: 'yabble',
+  path: 'auth',
+});
 
 export async function signInWithEmail(email: string, password: string) {
   const { data, error } = await auth.signInWithPassword({
@@ -12,6 +18,9 @@ export async function signUpWithEmail(email: string, password: string) {
   const { data, error } = await auth.signUp({
     email,
     password,
+    options: {
+      emailRedirectTo: redirectUri,
+    },
   });
   return { data, error };
 }

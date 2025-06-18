@@ -12,12 +12,14 @@ import {
   Keyboard,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Mail, Lock, LogIn, Apple } from 'lucide-react-native';
+import { Mail, Lock, LogIn } from 'lucide-react-native';
 import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import { signInWithEmail } from '../../lib/auth';
+import { useOAuth } from '../../hooks/useOAuth';
+import { GoogleIcon, FacebookIcon } from '../../components/ui/SocialIcons';
 import Logo from '../../components/ui/Logo';
 
 export default function SignInScreen() {
@@ -28,6 +30,9 @@ export default function SignInScreen() {
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // OAuth hook
+  const { isLoading: isOAuthLoading, loadingProvider, signInWithGoogle, signInWithFacebook } = useOAuth();
 
   // Dismiss keyboard when tapping outside
   const dismissKeyboard = () => {
@@ -63,10 +68,7 @@ export default function SignInScreen() {
 
     setIsLoading(true);
     try {
-      const { error: signInError } = await signInWithEmail(
-        email.trim(),
-        password
-      );
+      const { error: signInError } = await signInWithEmail(email.trim(), password);
       if (signInError) throw signInError;
     } catch (err: any) {
       setError(err.message);
@@ -75,36 +77,38 @@ export default function SignInScreen() {
     }
   };
 
-  const handleSocialSignIn = (provider: string) => {
-    // Placeholder for social sign-in
-    console.log(`Sign in with ${provider}`);
+  const handleSocialSignIn = async (provider: 'google' | 'facebook') => {
+    try {
+      switch (provider) {
+        case 'google':
+          await signInWithGoogle();
+          break;
+        case 'facebook':
+          await signInWithFacebook();
+          break;
+      }
+    } catch (error) {
+      // Error handling is done in the useOAuth hook
+      console.error(`${provider} sign in failed:`, error);
+    }
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
+      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView
           contentContainerStyle={styles.scrollContainer}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <TouchableOpacity
-            style={styles.touchableContainer}
-            activeOpacity={1}
-            onPress={dismissKeyboard}
-          >
+          <TouchableOpacity style={styles.touchableContainer} activeOpacity={1} onPress={dismissKeyboard}>
             {/* Header */}
             <View style={styles.header}>
               <View style={styles.logoContainer}>
                 <Logo width={100} height={100} style={styles.logoImage} />
               </View>
               <Text style={styles.title}>Welcome Back</Text>
-              <Text style={styles.subtitle}>
-                Sign in to your AI audiobook library
-              </Text>
+              <Text style={styles.subtitle}>Sign in to your AI audiobook library</Text>
             </View>
 
             {/* Form */}
@@ -159,13 +163,7 @@ export default function SignInScreen() {
                 title={isLoading ? 'Signing In...' : 'Sign In'}
                 onPress={handleSignIn}
                 disabled={isLoading || !email.trim() || !password.trim()}
-                icon={
-                  isLoading ? (
-                    <ActivityIndicator color="white" size="small" />
-                  ) : (
-                    <LogIn size={20} color="white" />
-                  )
-                }
+                icon={isLoading ? <ActivityIndicator color="white" size="small" /> : <LogIn size={20} color="white" />}
                 style={styles.signInButton}
               />
 
@@ -179,40 +177,37 @@ export default function SignInScreen() {
               {/* Social Login Buttons */}
               <View style={styles.socialContainer}>
                 <TouchableOpacity
-                  style={styles.socialButton}
-                  onPress={() => handleSocialSignIn('Google')}
+                  style={[styles.socialButton, loadingProvider === 'google' && styles.socialButtonLoading]}
+                  onPress={() => handleSocialSignIn('google')}
+                  disabled={isOAuthLoading}
                 >
-                  <Text style={styles.socialButtonText}>G</Text>
+                  {loadingProvider === 'google' ? (
+                    <ActivityIndicator color={Colors.primary} size="small" />
+                  ) : (
+                    <GoogleIcon size={25} />
+                  )}
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={styles.socialButton}
-                  onPress={() => handleSocialSignIn('Apple')}
+                  style={[styles.socialButton, loadingProvider === 'facebook' && styles.socialButtonLoading]}
+                  onPress={() => handleSocialSignIn('facebook')}
+                  disabled={isOAuthLoading}
                 >
-                  <Apple size={20} color={Colors.primary} />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.socialButton}
-                  onPress={() => handleSocialSignIn('Facebook')}
-                >
-                  <Text style={styles.socialButtonText}>f</Text>
+                  {loadingProvider === 'facebook' ? (
+                    <ActivityIndicator color={Colors.primary} size="small" />
+                  ) : (
+                    <FacebookIcon size={25} />
+                  )}
                 </TouchableOpacity>
               </View>
 
               {/* Links */}
               <View style={styles.linksContainer}>
-                <TouchableOpacity
-                  style={styles.linkButton}
-                  onPress={() => router.push('/forgot-password')}
-                >
+                <TouchableOpacity style={styles.linkButton} onPress={() => router.push('/forgot-password')}>
                   <Text style={styles.linkText}>Forgot Password?</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={styles.linkButton}
-                  onPress={() => router.replace('/sign-up')}
-                >
+                <TouchableOpacity style={styles.linkButton} onPress={() => router.replace('/sign-up')}>
                   <Text style={styles.linkText}>Create Account</Text>
                 </TouchableOpacity>
               </View>
@@ -320,7 +315,7 @@ const styles = StyleSheet.create({
   },
   socialContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     marginBottom: Layout.spacing.lg,
     paddingHorizontal: Layout.spacing.md,
   },
@@ -333,11 +328,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: Colors.gray[200],
+    marginHorizontal: Layout.spacing.md,
   },
-  socialButtonText: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Colors.primary,
+  socialButtonLoading: {
+    opacity: 0.7,
   },
   linksContainer: {
     flexDirection: 'row',
