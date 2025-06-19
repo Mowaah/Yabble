@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, ScrollView, Pressable, Animated } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, Pressable, Animated, Alert } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ChevronLeft, Music, Play, Volume2, Pause, Sparkles, Headphones } from 'lucide-react-native';
@@ -11,7 +11,8 @@ import Card from '../components/ui/Card';
 import { BackgroundSelectorRef } from '../components/audiobook/BackgroundSelector';
 import { mockAudioEffects } from '../utils/mockData';
 import { audioEffects } from '../lib/audio';
-import { updateAudiobook } from '../lib/database';
+import { updateAudiobook, getAudiobook } from '../lib/database';
+import { AUDIO_CONSTANTS } from '../constants/AudioConstants';
 
 export default function AudioScreen() {
   const router = useRouter();
@@ -78,11 +79,17 @@ export default function AudioScreen() {
 
   const handlePreviewAudio = async (effectId: string, previewUrl: string) => {
     try {
-      // If the same audio is playing, stop it
       if (playingPreviewId === effectId) {
-        await audioEffects.stopAllAudio();
-        setPlayingPreviewId(null);
-        stopWaveAnimation();
+        const status = await audioEffects.getPlaybackStatus();
+        if (status.backgroundIsPlaying) {
+          await audioEffects.pauseAudio();
+          setPlayingPreviewId(null);
+          stopWaveAnimation();
+        } else {
+          await audioEffects.resumeAudio();
+          setPlayingPreviewId(effectId);
+          startWaveAnimation();
+        }
         return;
       }
 
@@ -106,7 +113,7 @@ export default function AudioScreen() {
           setPlayingPreviewId(null);
           stopWaveAnimation();
         } else if (playingPreviewId === effectId) {
-          setTimeout(checkStatus, 500);
+          setTimeout(checkStatus, AUDIO_CONSTANTS.STATUS_CHECK_INTERVAL_PLAYER);
         }
       };
 
@@ -150,7 +157,7 @@ export default function AudioScreen() {
         if (!status.voiceIsPlaying && !status.backgroundIsPlaying) {
           setIsPlaying(false);
         } else if (isPlaying) {
-          setTimeout(checkStatus, 500); // Check every 500ms
+          setTimeout(checkStatus, AUDIO_CONSTANTS.STATUS_CHECK_INTERVAL_PLAYER); // Check every 500ms
         }
       };
 
@@ -215,33 +222,51 @@ export default function AudioScreen() {
 
   const handleNext = async () => {
     try {
-      // Stop any playing preview before moving to export
+      // Stop any playing preview
       await backgroundSelectorRef.current?.stopPreview();
 
-      if (selectedEffect && id) {
-        // This part seems to have placeholder logic.
-        // For now, we'll assume the text_content is already correctly set
-        // from the previous step and we just add the background effect.
-        // A proper implementation would fetch the existing text_content object.
-        const originalText = '...'; // Placeholder
-        await updateAudiobook(id as string, {
-          textContent: JSON.stringify({
-            originalText: originalText, // This should be fetched
-            backgroundEffect: selectedEffect,
-          }),
-        });
+      if (id) {
+        const audiobookId = Array.isArray(id) ? id[0] : id;
+        // Fetch current audiobook data to get existing text_content
+        const { data: audiobook, error: fetchError } = await getAudiobook(audiobookId);
+
+        if (fetchError) {
+          throw fetchError;
+        }
+
+        if (audiobook) {
+          let textContent;
+          try {
+            textContent = JSON.parse(audiobook.text_content || '{}');
+          } catch {
+            textContent = {};
+          }
+
+          // Update the background effect
+          textContent.backgroundEffect = selectedEffect;
+
+          // Update audiobook with background effect and mark as completed
+          const result = await updateAudiobook(audiobookId, {
+            text_content: JSON.stringify(textContent),
+            status: 'completed', // Mark as completed when user finishes the workflow
+          });
+        } else {
+          throw new Error('No audiobook data found');
+        }
+      } else {
+        throw new Error('No ID parameter provided');
       }
 
-      router.push({
-        pathname: '/export',
-        params: { id: id as string },
-      });
+      // Small delay to ensure database update propagates before navigating
+      setTimeout(() => {
+        router.push('/library');
+      }, 500);
     } catch (error) {
       console.error('Error updating audiobook:', error);
-      router.push({
-        pathname: '/export',
-        params: { id: id as string },
-      });
+      // Even on error, go back to library after delay
+      setTimeout(() => {
+        router.push('/library');
+      }, 500);
     }
   };
 
@@ -557,7 +582,7 @@ export default function AudioScreen() {
         <View style={styles.footer}>
           <Button title="Back" onPress={handleBack} variant="ghost" style={styles.backFooterButton} />
           <Button
-            title="Continue to Export"
+            title="Complete Audiobook"
             onPress={handleNext}
             style={styles.nextButton}
             icon={<Sparkles size={18} color={Colors.white} />}

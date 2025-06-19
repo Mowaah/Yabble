@@ -12,18 +12,19 @@ import {
   Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Play, Pause, Download, Share2, Trash2, Heart, Upload, Clock, Mic, MoreHorizontal } from 'lucide-react-native';
+import { Play, Pause, Download, Share2, Trash2, Heart, Upload, MoreHorizontal } from 'lucide-react-native';
 import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
 import Card from '../ui/Card';
 import { Audio } from 'expo-av';
-import { deleteAudiobook } from '../../lib/database';
+import { deleteAudiobook, getAudiobook } from '../../lib/database';
 import { audioEffects } from '../../lib/audio';
 import { mockAudioEffects } from '../../utils/mockData';
-import type { Tables } from '../../lib/database';
+import { calculateAudiobookProgress, getDraftContinuationRoute } from '../../utils/progressUtils';
+import { AUDIO_CONSTANTS } from '../../constants/AudioConstants';
 
 interface AudiobookCardProps {
-  book: Tables['audiobooks']['Row'];
+  book: any;
   compact?: boolean;
   isFavorite?: boolean;
   onToggleFavorite?: () => void;
@@ -58,6 +59,36 @@ export default function AudiobookCard({
   ]);
 
   const handlePress = () => {
+    // If it's a completed audiobook, go to the player
+    if (book.status === 'completed') {
+      router.push(`/library/${book.id}`);
+      return;
+    }
+
+    // If it's a draft, continue where user left off
+    if (book.status === 'draft') {
+      const progress = getProgress();
+
+      if (progress.stage === AUDIO_CONSTANTS.PROGRESS_STAGES.TEXT_ONLY) {
+        // Stage 1: Only text, need to select voice
+        router.push({
+          pathname: '/voice',
+          params: { id: book.id },
+        });
+      } else if (progress.stage === AUDIO_CONSTANTS.PROGRESS_STAGES.TEXT_AND_VOICE) {
+        // Stage 2: Text + voice, need to select background audio
+        router.push({
+          pathname: '/audio',
+          params: { id: book.id },
+        });
+      } else {
+        // Stage 3: Should be completed, go to player
+        router.push(`/library/${book.id}`);
+      }
+      return;
+    }
+
+    // Fallback: go to player
     router.push(`/library/${book.id}`);
   };
 
@@ -77,21 +108,24 @@ export default function AudiobookCard({
   };
 
   const getProgress = () => {
-    if (book.status === 'draft') {
-      const contentLength = book.text_content?.length || 0;
-      const estimatedFullLength = 5000;
-      return Math.min((contentLength / estimatedFullLength) * 100, 95);
-    }
-    return 100;
+    return calculateAudiobookProgress(book);
   };
 
-  const getBackgroundEffect = () => {
+  const getBackgroundEffectFromFullBook = async (bookId: string) => {
     try {
-      const parsedContent = JSON.parse(book.text_content);
-      return parsedContent.backgroundEffect;
-    } catch {
-      return null;
+      const { data: fullBook, error } = await getAudiobook(bookId);
+      if (error) {
+        console.warn('Failed to get background effect:', error);
+        return null;
+      }
+      if (fullBook?.text_content) {
+        const parsedContent = JSON.parse(fullBook.text_content);
+        return parsedContent.backgroundEffect;
+      }
+    } catch (error) {
+      console.warn('Failed to get background effect:', error);
     }
+    return null;
   };
 
   const handlePlayPause = async () => {
@@ -111,38 +145,61 @@ export default function AudiobookCard({
       }),
     ]).start();
 
+    const isCurrentlyPlayingBook = audioEffects.getCurrentVoiceUrl() === book.audio_url;
+
     try {
       if (isPlaying) {
         setIsLoadingAudio(true);
-        await audioEffects.stopAllAudio();
+        await audioEffects.pauseAudio();
         setIsPlaying(false);
         setIsLoadingAudio(false);
       } else {
         setIsLoadingAudio(true);
-        await audioEffects.loadVoiceAudio(book.audio_url);
 
-        const backgroundEffectId = getBackgroundEffect();
-        if (backgroundEffectId) {
-          const effect = mockAudioEffects.find((e) => e.id === backgroundEffectId);
-          if (effect?.previewUrl) {
-            await audioEffects.loadBackgroundMusic(effect.previewUrl);
+        if (isCurrentlyPlayingBook) {
+          // Check if we're at the end and need to restart from beginning
+          const status = await audioEffects.getPlaybackStatus();
+          const isAtEnd =
+            status.voicePosition && status.voiceDuration && status.voicePosition >= status.voiceDuration - 1000; // Within 1 second of end
+
+          if (isAtEnd) {
+            await audioEffects.seekVoice(0);
           }
+
+          await audioEffects.resumeAudio();
+        } else {
+          await audioEffects.loadVoiceAudio(book.audio_url);
+
+          const backgroundEffectId = await getBackgroundEffectFromFullBook(book.id);
+          if (backgroundEffectId) {
+            const effect = mockAudioEffects.find((e) => e.id === backgroundEffectId);
+            if (effect?.previewUrl) {
+              await audioEffects.loadBackgroundMusic(effect.previewUrl);
+            }
+          }
+
+          await audioEffects.playMixedAudio();
         }
 
-        await audioEffects.playMixedAudio();
         setIsPlaying(true);
         setIsLoadingAudio(false);
 
         const checkStatus = async () => {
-          const status = await audioEffects.getPlaybackStatus();
-          if (!status.voiceIsPlaying && !status.backgroundIsPlaying) {
+          // Only continue checking if this book is the one playing
+          if (audioEffects.getCurrentVoiceUrl() !== book.audio_url) {
             setIsPlaying(false);
             return;
           }
-          setTimeout(checkStatus, 500);
+
+          const status = await audioEffects.getPlaybackStatus();
+          if (!status.voiceIsPlaying) {
+            setIsPlaying(false);
+            return;
+          }
+          setTimeout(checkStatus, 1000); // Less frequent checking for library cards
         };
 
-        setTimeout(checkStatus, 1000);
+        setTimeout(checkStatus, AUDIO_CONSTANTS.INITIAL_STATUS_CHECK_DELAY); // Longer delay for library cards
       }
     } catch (error) {
       console.error('Error playing audio:', error);
@@ -239,12 +296,14 @@ export default function AudiobookCard({
   };
 
   useEffect(() => {
-    return () => {
-      if (isPlaying) {
-        audioEffects.stopAllAudio();
+    const interval = setInterval(() => {
+      const isThisBookPlaying = audioEffects.getCurrentVoiceUrl() === book.audio_url;
+      if (!isThisBookPlaying && isPlaying) {
+        setIsPlaying(false);
       }
-    };
-  }, [isPlaying]);
+    }, AUDIO_CONSTANTS.STATUS_CHECK_INTERVAL_CARD);
+    return () => clearInterval(interval);
+  }, [isPlaying, book.audio_url]);
 
   return (
     <Card onPress={handlePress} style={styles.container}>
@@ -327,10 +386,17 @@ export default function AudiobookCard({
           {/* Progress Bar for Drafts */}
           {book.status === 'draft' && (
             <View style={styles.progressContainer}>
-              <View style={styles.progressBar}>
-                <View style={[styles.progressFill, { width: `${getProgress()}%` }]} />
+              <View style={styles.progressHeader}>
+                <View style={styles.progressInfo}>
+                  <View style={styles.progressBar}>
+                    <View style={[styles.progressFill, { width: `${getProgress().percentage}%` }]} />
+                  </View>
+                  <Text style={styles.progressText}>
+                    {getProgress().stage}/{getProgress().total}
+                  </Text>
+                </View>
+                <Text style={styles.continueHint}>Tap to continue</Text>
               </View>
-              <Text style={styles.progressText}>{Math.round(getProgress())}%</Text>
             </View>
           )}
 
@@ -534,6 +600,23 @@ const styles = StyleSheet.create({
     color: Colors.gray[500],
     marginLeft: 10,
     fontWeight: '600',
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  progressInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  continueHint: {
+    fontSize: 11,
+    color: Colors.primary,
+    fontWeight: '600',
+    fontStyle: 'italic',
   },
   bottomActions: {
     flexDirection: 'row',

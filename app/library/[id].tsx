@@ -1,18 +1,19 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { StyleSheet, Text, View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, Alert, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ChevronLeft, Share2, Play, Pause, Bookmark, RotateCw, RotateCcw, Rewind } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Audio, AVPlaybackStatus } from 'expo-av';
 import Slider from '@react-native-community/slider';
 import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
 import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../lib/supabase';
 import { updateAudiobook } from '../../lib/database';
-import type { Tables } from '../../lib/database';
 import HighlightedText from '../../components/audiobook/HighlightedText';
 import PlayerSkeleton from '../../components/audiobook/PlayerSkeleton';
+import { mockAudioEffects } from '../../utils/mockData';
+import { audioEffects } from '../../lib/audio';
+import { AUDIO_CONSTANTS } from '../../constants/AudioConstants';
 
 // Helper to format time from ms to mm:ss
 const formatTime = (millis: number) => {
@@ -28,20 +29,19 @@ export default function AudiobookPlayerScreen() {
   const { session } = useAuth();
 
   // Audiobook data
-  const [audiobook, setAudiobook] = useState<Tables['audiobooks']['Row'] | null>(null);
+  const [audiobook, setAudiobook] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Player state
-  const soundRef = useRef<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [position, setPosition] = useState(0);
-  const positionRef = useRef(position);
   const [isPlayerLoading, setIsPlayerLoading] = useState(false);
   const [isSeeking, setIsSeeking] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1.0);
-  const [playbackStatus, setPlaybackStatus] = useState<AVPlaybackStatus | null>(null);
+  const statusIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const scrollRef = useRef<ScrollView>(null);
+  const positionRef = useRef(0);
 
   const PLAYBACK_RATES = [0.5, 0.75, 1, 1.5, 2];
 
@@ -72,118 +72,180 @@ export default function AudiobookPlayerScreen() {
     fetchAudiobook();
   }, [id, session?.user?.id]);
 
-  // Keep position ref updated
-  useEffect(() => {
-    positionRef.current = position;
-  }, [position]);
+  const loadAudio = async (book: any) => {
+    if (!book.audio_url) return;
+    await audioEffects.stopAllAudio();
+    setIsPlayerLoading(true);
 
-  // Playback status update handler
-  const onPlaybackStatusUpdate = useCallback(
-    (status: AVPlaybackStatus) => {
-      if (!status.isLoaded) return;
+    try {
+      await audioEffects.loadVoiceAudio(book.audio_url);
 
-      if (!isSeeking) {
-        setPosition(status.positionMillis);
-      }
-      setDuration(status.durationMillis || 0);
-      setIsPlaying(status.isPlaying);
-      setIsPlayerLoading(status.isBuffering);
-    },
-    [isSeeking]
-  );
-
-  // Sound lifecycle management
-  useEffect(() => {
-    const loadSound = async () => {
-      if (audiobook?.audio_url) {
-        try {
-          await Audio.setAudioModeAsync({
-            allowsRecordingIOS: false,
-            playsInSilentModeIOS: true,
-          });
-
-          const { sound } = await Audio.Sound.createAsync(
-            { uri: audiobook.audio_url },
-            { shouldPlay: false, progressUpdateIntervalMillis: 500 }
-          );
-
-          soundRef.current = sound;
-          soundRef.current.setOnPlaybackStatusUpdate(onPlaybackStatusUpdate);
-
-          // If there's a last known position, seek to it
-          if (audiobook.last_position_millis && audiobook.last_position_millis > 0) {
-            await soundRef.current.setPositionAsync(audiobook.last_position_millis);
-          }
-
-          const status = await sound.getStatusAsync();
-          if (status.isLoaded) {
-            setDuration(status.durationMillis || 0);
-          }
-        } catch (error) {
-          console.error('Error loading sound', error);
+      const content = book.text_content ? JSON.parse(book.text_content) : {};
+      const backgroundEffectId = content.backgroundEffect;
+      if (backgroundEffectId) {
+        const effect = mockAudioEffects.find((e) => e.id === backgroundEffectId);
+        if (effect?.previewUrl) {
+          await audioEffects.loadBackgroundMusic(effect.previewUrl);
         }
       }
-    };
 
-    loadSound();
+      const status = await audioEffects.getPlaybackStatus();
+      if (status.voiceDuration) {
+        setDuration(status.voiceDuration);
+      }
+      // If there's a last known position, seek to it
+      if (book.last_position_millis && book.last_position_millis > 0) {
+        await audioEffects.seekVoice(book.last_position_millis);
+        setPosition(book.last_position_millis);
+      }
+    } catch (error) {
+      console.error('Error loading audio:', error);
+      Alert.alert('Error', 'Could not load audio for playback.');
+    } finally {
+      setIsPlayerLoading(false);
+    }
+  };
 
+  useEffect(() => {
+    if (audiobook) {
+      loadAudio(audiobook);
+    }
+
+    // Cleanup on unmount
     return () => {
-      // Save progress when the component unmounts
+      if (statusIntervalRef.current) {
+        clearInterval(statusIntervalRef.current);
+      }
       const saveProgress = async () => {
-        if (soundRef.current && audiobook?.id && positionRef.current > 0) {
-          try {
-            const status = await soundRef.current.getStatusAsync();
-            if (status.isLoaded) {
-              await updateAudiobook(audiobook.id, {
-                last_position_millis: status.positionMillis,
-              });
-            }
-          } catch (error) {
-            // Don't need to bother the user, just log it.
-            console.error('Failed to save progress:', error);
-          }
+        if (audiobook?.id && positionRef.current > 0) {
+          await updateAudiobook(audiobook.id, {
+            last_position_millis: positionRef.current,
+          });
         }
       };
-
       saveProgress();
-      soundRef.current?.unloadAsync();
+      audioEffects.stopAllAudio();
     };
-  }, [audiobook?.id, audiobook?.audio_url]);
+  }, [audiobook]);
+
+  // Smooth status polling - only update position and sync UI state
+  useEffect(() => {
+    if (isPlaying) {
+      statusIntervalRef.current = setInterval(async () => {
+        try {
+          const status = await audioEffects.getPlaybackStatus();
+
+          if (status.voiceIsPlaying) {
+            // Update position while playing
+            const newPosition = status.voicePosition || 0;
+            if (!isSeeking) {
+              // Don't update position while user is seeking
+              setPosition(newPosition);
+              positionRef.current = newPosition;
+            }
+          } else {
+            // Voice stopped - sync UI state with audio state
+            setIsPlaying(false);
+
+            // If audio finished naturally, set position to the very end
+            if (status.hasFinished && status.voiceDuration) {
+              setPosition(status.voiceDuration); // Set slider to exact end
+              positionRef.current = status.voiceDuration;
+            }
+
+            if (statusIntervalRef.current) {
+              clearInterval(statusIntervalRef.current);
+            }
+          }
+        } catch (error) {
+          console.error('Error checking playback status:', error);
+          setIsPlaying(false);
+          if (statusIntervalRef.current) {
+            clearInterval(statusIntervalRef.current);
+          }
+        }
+      }, AUDIO_CONSTANTS.STATUS_CHECK_INTERVAL_PLAYER);
+    } else {
+      if (statusIntervalRef.current) {
+        clearInterval(statusIntervalRef.current);
+      }
+    }
+
+    return () => {
+      if (statusIntervalRef.current) {
+        clearInterval(statusIntervalRef.current);
+      }
+    };
+  }, [isPlaying]);
 
   // User actions
   const handlePlayPause = async () => {
-    if (!soundRef.current) return;
-    isPlaying ? await soundRef.current.pauseAsync() : await soundRef.current.playAsync();
+    try {
+      setIsPlayerLoading(true);
+
+      if (isPlaying) {
+        await audioEffects.pauseAudio();
+        setIsPlaying(false);
+      } else {
+        // Improved logic: Check if we should restart from beginning
+        const status = await audioEffects.getPlaybackStatus();
+        const shouldRestart =
+          status.hasFinished ||
+          (status.voicePosition &&
+            status.voiceDuration &&
+            status.voicePosition >= status.voiceDuration - AUDIO_CONSTANTS.RESTART_THRESHOLD_MS);
+
+        if (shouldRestart) {
+          // Reset to beginning if audio has finished or user is very close to end
+          await audioEffects.seekVoice(0);
+          setPosition(0);
+          positionRef.current = 0;
+        }
+
+        await audioEffects.resumeAudio();
+        setIsPlaying(true);
+      }
+    } catch (error) {
+      console.error('Error handling play/pause:', error);
+      Alert.alert('Playback Error', 'Could not play the audiobook.');
+      setIsPlaying(false);
+    } finally {
+      setIsPlayerLoading(false);
+    }
   };
 
   const handleSeek = async (value: number) => {
-    if (!soundRef.current) return;
     setIsSeeking(false);
-    await soundRef.current.setPositionAsync(value);
+
+    try {
+      await audioEffects.seekVoice(value);
+      setPosition(value);
+      positionRef.current = value;
+
+      // Don't automatically start playing after seeking - respect current play state
+      // If user seeks while paused, keep it paused
+    } catch (error) {
+      console.error('Error seeking audio:', error);
+    }
   };
 
   const handleSlidingStart = () => {
-    if (!soundRef.current) return;
     setIsSeeking(true);
   };
 
   const skipBy = async (milliseconds: number) => {
-    if (!soundRef.current) return;
     const newPosition = position + milliseconds;
-    await soundRef.current.setPositionAsync(Math.max(0, Math.min(newPosition, duration)));
+    const newClampedPosition = Math.max(0, Math.min(newPosition, duration));
+    await audioEffects.seekVoice(newClampedPosition);
+    setPosition(newClampedPosition);
   };
 
   const handleRateChange = async () => {
-    if (!soundRef.current) return;
     const currentIndex = PLAYBACK_RATES.indexOf(playbackRate);
     const nextIndex = (currentIndex + 1) % PLAYBACK_RATES.length;
     const newRate = PLAYBACK_RATES[nextIndex];
-    try {
-      await soundRef.current.setRateAsync(newRate, true);
-      setPlaybackRate(newRate);
-    } catch (error) {
-      console.error('Failed to set playback rate', error);
-    }
+    await audioEffects.setRate(newRate);
+    setPlaybackRate(newRate);
   };
 
   const handleBookmark = async () => {

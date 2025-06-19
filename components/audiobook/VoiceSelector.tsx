@@ -66,6 +66,7 @@ export default function VoiceSelector({
   const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
   const [loadingVoiceId, setLoadingVoiceId] = useState<string | null>(null);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [currentPreviewUrl, setCurrentPreviewUrl] = useState<string | null>(null);
   const [animatedValues] = useState(() =>
     voices.reduce((acc, voice) => {
       acc[voice.voice_id] = {
@@ -100,6 +101,7 @@ export default function VoiceSelector({
         await sound.stopAsync();
         await sound.unloadAsync();
         setSound(null);
+        setCurrentPreviewUrl(null);
 
         // Stop all animations
         Object.values(animatedValues).forEach(({ gradientAnimation, pulseAnimation }) => {
@@ -175,18 +177,32 @@ export default function VoiceSelector({
 
   const handlePlayPreview = async (voiceId: string, previewUrl?: string) => {
     try {
-      // If the same voice is playing, stop it
-      if (playingVoiceId === voiceId) {
-        await stopCurrentSound();
+      if (!previewUrl) return;
+
+      const isSameVoice = playingVoiceId === voiceId;
+      const isSameUrl = currentPreviewUrl === previewUrl;
+
+      if (isSameVoice && sound) {
+        const status = await sound.getStatusAsync();
+        if (status.isLoaded) {
+          if (status.isPlaying) {
+            await sound.pauseAsync();
+            setPlayingVoiceId(null);
+            animateVoiceCard(voiceId, false);
+          } else {
+            await sound.playAsync();
+            setPlayingVoiceId(voiceId);
+            animateVoiceCard(voiceId, true);
+          }
+        }
         return;
       }
 
       // Stop any currently playing sound before starting a new one
       await stopCurrentSound();
 
-      if (!previewUrl) return;
-
       setLoadingVoiceId(voiceId);
+      setCurrentPreviewUrl(previewUrl);
 
       const { sound: newSound } = await Audio.Sound.createAsync(
         { uri: previewUrl },
@@ -207,6 +223,7 @@ export default function VoiceSelector({
         if (status.isLoaded && status.didJustFinish) {
           setPlayingVoiceId(null);
           setSound(null);
+          setCurrentPreviewUrl(null);
           animateVoiceCard(voiceId, false);
         }
       });
@@ -217,6 +234,7 @@ export default function VoiceSelector({
       setPlayingVoiceId(null);
       setLoadingVoiceId(null);
       setSound(null);
+      setCurrentPreviewUrl(null);
       animateVoiceCard(voiceId, false);
     }
   };

@@ -7,6 +7,7 @@ import Card from '../ui/Card';
 import { Audio } from 'expo-av';
 import { audioEffects } from '../../lib/audio';
 import type { AudioEffect } from '../../types';
+import { AUDIO_CONSTANTS } from '../../constants/AudioConstants';
 
 interface BackgroundSelectorProps {
   effects: AudioEffect[];
@@ -23,7 +24,6 @@ const BackgroundSelector = forwardRef<BackgroundSelectorRef, BackgroundSelectorP
   ({ effects, selectedEffectId, onSelectEffect, onPreviewEffect }, ref) => {
     const [playingEffectId, setPlayingEffectId] = useState<string | null>(null);
     const [loadingEffectId, setLoadingEffectId] = useState<string | null>(null);
-    const [sound, setSound] = useState<Audio.Sound | null>(null);
     const [isPlayButtonPressed, setIsPlayButtonPressed] = useState(false);
     const [animatedValues] = useState(() =>
       effects.reduce((acc, effect) => {
@@ -46,27 +46,18 @@ const BackgroundSelector = forwardRef<BackgroundSelectorRef, BackgroundSelectorP
     };
 
     const stopCurrentSound = async () => {
-      if (sound) {
-        try {
-          await sound.stopAsync();
-          await sound.unloadAsync();
-          setSound(null);
-          setPlayingEffectId(null);
-          setLoadingEffectId(null);
-
-          // Stop all wave animations
-          Object.values(animatedValues).forEach(({ waveAnimation }) => {
-            waveAnimation.stopAnimation();
-            Animated.timing(waveAnimation, {
-              toValue: 0,
-              duration: 300,
-              useNativeDriver: false,
-            }).start();
-          });
-        } catch (error) {
-          console.error('Error stopping sound:', error);
-        }
-      }
+      await audioEffects.stopAllAudio();
+      setPlayingEffectId(null);
+      setLoadingEffectId(null);
+      // Stop all wave animations
+      Object.values(animatedValues).forEach(({ waveAnimation }) => {
+        waveAnimation.stopAnimation();
+        Animated.timing(waveAnimation, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: false,
+        }).start();
+      });
     };
 
     const animateWaveform = (effectId: string, isPlaying: boolean) => {
@@ -93,47 +84,48 @@ const BackgroundSelector = forwardRef<BackgroundSelectorRef, BackgroundSelectorP
 
     const handlePlayPreview = async (effectId: string, previewUrl?: string) => {
       try {
-        // If the same effect is playing, stop it
+        if (!previewUrl) return;
+
         if (playingEffectId === effectId) {
-          await stopCurrentSound();
+          const status = await audioEffects.getPlaybackStatus();
+          if (status.backgroundIsPlaying) {
+            await audioEffects.pauseAudio();
+            setPlayingEffectId(null);
+            animateWaveform(effectId, false);
+          } else {
+            await audioEffects.resumeAudio();
+            setPlayingEffectId(effectId);
+            animateWaveform(effectId, true);
+          }
           return;
         }
 
         // Stop any currently playing sound before starting a new one
         await stopCurrentSound();
 
-        if (!previewUrl) return;
-
         setLoadingEffectId(effectId);
 
-        const { sound: newSound } = await Audio.Sound.createAsync(
-          { uri: previewUrl },
-          {
-            shouldPlay: true,
-            volume: audioEffects.getVolume(),
-          }
-        );
+        await audioEffects.loadBackgroundMusic(previewUrl);
+        await audioEffects.playBackgroundMusic();
 
-        setSound(newSound);
         setLoadingEffectId(null);
         setPlayingEffectId(effectId);
         animateWaveform(effectId, true);
 
-        // Handle playback completion
-        newSound.setOnPlaybackStatusUpdate((status) => {
-          if (status.isLoaded && status.didJustFinish) {
+        const checkStatus = async () => {
+          const status = await audioEffects.getPlaybackStatus();
+          if (!status.backgroundIsPlaying) {
             setPlayingEffectId(null);
-            setSound(null);
             animateWaveform(effectId, false);
+          } else if (playingEffectId === effectId) {
+            setTimeout(checkStatus, AUDIO_CONSTANTS.STATUS_CHECK_INTERVAL_PLAYER);
           }
-        });
-
-        await newSound.playAsync();
+        };
+        setTimeout(checkStatus, 1000);
       } catch (error) {
         console.error('Error playing preview:', error);
         setPlayingEffectId(null);
         setLoadingEffectId(null);
-        setSound(null);
         animateWaveform(effectId, false);
       }
     };

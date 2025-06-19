@@ -85,7 +85,7 @@ export default function VoiceScreen() {
       const newTextContent = {
         originalText,
         alignment, // This contains the word timings
-        backgroundEffect: null,
+        // Don't set backgroundEffect here - let the audio screen set it
       };
 
       // Construct the data URL directly from the base64 string
@@ -96,7 +96,7 @@ export default function VoiceScreen() {
         voice_id: selectedVoice,
         audio_url: audioUrl,
         text_content: JSON.stringify(newTextContent) as any, // Save the rich text content
-        status: 'completed',
+        status: 'draft', // Keep as draft until background audio is selected
       });
 
       // Navigate to audio effects for background selection
@@ -259,7 +259,7 @@ export default function VoiceScreen() {
         <View style={styles.footer}>
           <Button title="Back" onPress={handleBack} variant="ghost" style={styles.backFooterButton} />
           <Button
-            title={isProcessing ? `Generating... ${Math.round(progress)}%` : 'Generate Audiobook'}
+            title={isProcessing ? `Generating Voice... ${Math.round(progress)}%` : 'Generate Voice'}
             onPress={handleNext}
             style={styles.generateButton}
             icon={isProcessing ? undefined : <Sparkles size={18} color={Colors.white} />}

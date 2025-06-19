@@ -1,7 +1,4 @@
 import { db as supabase } from './supabase';
-import { Database } from '../types/supabase';
-
-export type Tables = Database['public']['Tables'];
 
 // Audiobooks
 export async function getAudiobooks(userId: string) {
@@ -14,24 +11,47 @@ export async function getAudiobooks(userId: string) {
   return { data, error };
 }
 
+export async function getAudiobooksForLibrary(userId: string) {
+  const { data, error } = await supabase
+    .from('audiobooks')
+    .select(
+      `
+      id,
+      title,
+      cover_image,
+      duration,
+      status,
+      bookmarked,
+      voice_id,
+      created_at,
+      last_position_millis,
+      audio_url,
+      text_content
+    `
+    )
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  return { data, error };
+}
+
 export async function getAudiobook(id: string) {
   const { data, error } = await supabase.from('audiobooks').select('*').eq('id', id).single();
 
   if (error) {
     console.error('Error fetching audiobook:', error);
-    throw new Error(error.message);
   }
 
-  return data;
+  return { data, error };
 }
 
-export async function createAudiobook(audiobook: Tables['audiobooks']['Insert']) {
+export async function createAudiobook(audiobook: any) {
   const { data, error } = await supabase.from('audiobooks').insert(audiobook).select().single();
 
   return { data, error };
 }
 
-export async function updateAudiobook(id: string, updates: Partial<Tables['audiobooks']['Update']>) {
+export async function updateAudiobook(id: string, updates: any) {
   const { data, error } = await supabase.from('audiobooks').update(updates).eq('id', id).select().single();
 
   return { data, error };
@@ -61,7 +81,7 @@ export async function getUserProfile(userId: string) {
   }
 }
 
-export async function updateUserProfile(userId: string, updates: Partial<Tables['profiles']['Update']>) {
+export async function updateUserProfile(userId: string, updates: any) {
   try {
     const { data, error } = await supabase.from('profiles').update(updates).eq('id', userId).select().single();
 
@@ -79,7 +99,7 @@ export async function getVoiceSettings(userId: string) {
 
   return { data, error };
 }
-export async function saveVoiceSettings(settings: Tables['voice_settings']['Insert']) {
+export async function saveVoiceSettings(settings: any) {
   const { data, error } = await supabase.from('voice_settings').insert(settings).select().single();
 
   return { data, error };
