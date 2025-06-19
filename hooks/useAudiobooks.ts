@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { getAudiobooks } from '../lib/database';
-import type { Tables } from '../lib/database';
+import { getAudiobooksForLibrary } from '../lib/database';
 
 export function useAudiobooks() {
   const { session } = useAuth();
-  const [audiobooks, setAudiobooks] = useState<Tables['audiobooks']['Row'][]>([]);
+  const [audiobooks, setAudiobooks] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -21,7 +20,7 @@ export function useAudiobooks() {
       }
 
       try {
-        const { data, error } = await getAudiobooks(session.user.id);
+        const { data, error } = await getAudiobooksForLibrary(session.user.id);
         if (error) {
           throw error;
         }

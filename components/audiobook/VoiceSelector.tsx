@@ -1,14 +1,5 @@
 import React, { useState } from 'react';
-import {
-  StyleSheet,
-  Text,
-  View,
-  FlatList,
-  Pressable,
-  Animated,
-  Dimensions,
-  ActivityIndicator,
-} from 'react-native';
+import { StyleSheet, Text, View, FlatList, Pressable, Animated, Dimensions, ActivityIndicator } from 'react-native';
 import { Play, Pause, Sparkles } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '../../constants/Colors';
@@ -75,6 +66,7 @@ export default function VoiceSelector({
   const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
   const [loadingVoiceId, setLoadingVoiceId] = useState<string | null>(null);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [currentPreviewUrl, setCurrentPreviewUrl] = useState<string | null>(null);
   const [animatedValues] = useState(() =>
     voices.reduce((acc, voice) => {
       acc[voice.voice_id] = {
@@ -109,24 +101,23 @@ export default function VoiceSelector({
         await sound.stopAsync();
         await sound.unloadAsync();
         setSound(null);
+        setCurrentPreviewUrl(null);
 
         // Stop all animations
-        Object.values(animatedValues).forEach(
-          ({ gradientAnimation, pulseAnimation }) => {
-            gradientAnimation.stopAnimation();
-            pulseAnimation.stopAnimation();
-            Animated.timing(gradientAnimation, {
-              toValue: 0,
-              duration: 300,
-              useNativeDriver: false,
-            }).start();
-            Animated.timing(pulseAnimation, {
-              toValue: 1,
-              duration: 300,
-              useNativeDriver: true,
-            }).start();
-          }
-        );
+        Object.values(animatedValues).forEach(({ gradientAnimation, pulseAnimation }) => {
+          gradientAnimation.stopAnimation();
+          pulseAnimation.stopAnimation();
+          Animated.timing(gradientAnimation, {
+            toValue: 0,
+            duration: 300,
+            useNativeDriver: false,
+          }).start();
+          Animated.timing(pulseAnimation, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: true,
+          }).start();
+        });
 
         setPlayingVoiceId(null);
         setLoadingVoiceId(null);
@@ -186,18 +177,32 @@ export default function VoiceSelector({
 
   const handlePlayPreview = async (voiceId: string, previewUrl?: string) => {
     try {
-      // If the same voice is playing, stop it
-      if (playingVoiceId === voiceId) {
-        await stopCurrentSound();
+      if (!previewUrl) return;
+
+      const isSameVoice = playingVoiceId === voiceId;
+      const isSameUrl = currentPreviewUrl === previewUrl;
+
+      if (isSameVoice && sound) {
+        const status = await sound.getStatusAsync();
+        if (status.isLoaded) {
+          if (status.isPlaying) {
+            await sound.pauseAsync();
+            setPlayingVoiceId(null);
+            animateVoiceCard(voiceId, false);
+          } else {
+            await sound.playAsync();
+            setPlayingVoiceId(voiceId);
+            animateVoiceCard(voiceId, true);
+          }
+        }
         return;
       }
 
       // Stop any currently playing sound before starting a new one
       await stopCurrentSound();
 
-      if (!previewUrl) return;
-
       setLoadingVoiceId(voiceId);
+      setCurrentPreviewUrl(previewUrl);
 
       const { sound: newSound } = await Audio.Sound.createAsync(
         { uri: previewUrl },
@@ -218,6 +223,7 @@ export default function VoiceSelector({
         if (status.isLoaded && status.didJustFinish) {
           setPlayingVoiceId(null);
           setSound(null);
+          setCurrentPreviewUrl(null);
           animateVoiceCard(voiceId, false);
         }
       });
@@ -228,6 +234,7 @@ export default function VoiceSelector({
       setPlayingVoiceId(null);
       setLoadingVoiceId(null);
       setSound(null);
+      setCurrentPreviewUrl(null);
       animateVoiceCard(voiceId, false);
     }
   };
@@ -258,19 +265,12 @@ export default function VoiceSelector({
     };
   }, [voiceSettings]);
 
-  const renderVoiceItem = ({
-    item,
-  }: {
-    item: VoiceSelectorProps['voices'][0];
-  }) => {
+  const renderVoiceItem = ({ item }: { item: VoiceSelectorProps['voices'][0] }) => {
     const isSelected = item.voice_id === selectedVoiceId;
     const isPlaying = item.voice_id === playingVoiceId;
     const isLoading = item.voice_id === loadingVoiceId;
     const animations = animatedValues[item.voice_id];
-    const gradientColors = generateGradientColors(
-      item.name,
-      item.gender || 'female'
-    );
+    const gradientColors = generateGradientColors(item.name, item.gender || 'female');
 
     if (!animations) return null;
 
@@ -281,12 +281,7 @@ export default function VoiceSelector({
           onPress={() => handleVoicePress(item.voice_id)}
         >
           {/* Animated Gradient Background with Play Button */}
-          <Animated.View
-            style={[
-              styles.gradientContainer,
-              { transform: [{ scale: animations.pulseAnimation }] },
-            ]}
-          >
+          <Animated.View style={[styles.gradientContainer, { transform: [{ scale: animations.pulseAnimation }] }]}>
             <LinearGradient
               colors={gradientColors as any}
               start={{ x: 0, y: 0 }}
@@ -338,9 +333,7 @@ export default function VoiceSelector({
                   )}
                 </Pressable>
               ) : (
-                <Text style={styles.voiceInitial}>
-                  {item.name.charAt(0).toUpperCase()}
-                </Text>
+                <Text style={styles.voiceInitial}>{item.name.charAt(0).toUpperCase()}</Text>
               )}
 
               {/* Selected Badge */}
@@ -353,10 +346,7 @@ export default function VoiceSelector({
           </Animated.View>
 
           {/* Voice Name */}
-          <Text
-            style={[styles.voiceName, isSelected && styles.selectedVoiceName]}
-            numberOfLines={1}
-          >
+          <Text style={[styles.voiceName, isSelected && styles.selectedVoiceName]} numberOfLines={1}>
             {item.name}
           </Text>
         </Pressable>
@@ -376,9 +366,7 @@ export default function VoiceSelector({
             <View style={styles.categoryHeader}>
               <Text style={styles.categoryTitle}>{category.title}</Text>
               <View style={styles.categoryBadge}>
-                <Text style={styles.categoryBadgeText}>
-                  {categoryVoices.length} voices
-                </Text>
+                <Text style={styles.categoryBadgeText}>{categoryVoices.length} voices</Text>
               </View>
             </View>
 

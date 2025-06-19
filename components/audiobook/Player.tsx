@@ -1,14 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, Pressable } from 'react-native';
-import {
-  Play,
-  Pause,
-  SkipBack,
-  SkipForward,
-  Volume2,
-  Clock,
-  Share,
-} from 'lucide-react-native';
+import { Play, Pause, SkipBack, SkipForward, Volume2, Clock, Share } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 import Slider from '../ui/Slider';
 import Colors from '../../constants/Colors';
@@ -23,11 +15,7 @@ interface PlayerProps {
   onExpand?: () => void;
 }
 
-export default function Player({
-  audiobook,
-  minimized = false,
-  onExpand,
-}: PlayerProps) {
+export default function Player({ audiobook, minimized = false, onExpand }: PlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -68,9 +56,7 @@ export default function Player({
         // Load background effect if available
         const backgroundEffectId = getBackgroundEffect();
         if (backgroundEffectId) {
-          const effect = mockAudioEffects.find(
-            (e) => e.id === backgroundEffectId
-          );
+          const effect = mockAudioEffects.find((e) => e.id === backgroundEffectId);
           if (effect?.previewUrl) {
             await audioEffects.loadBackgroundMusic(effect.previewUrl);
           }
@@ -86,11 +72,8 @@ export default function Player({
 
           if (status.voiceDuration && status.voiceDuration > 0) {
             const newDuration = status.voiceDuration / 1000; // Convert to seconds
-            const newCurrentTime = status.voicePosition
-              ? status.voicePosition / 1000
-              : 0;
-            const newProgress =
-              newDuration > 0 ? newCurrentTime / newDuration : 0;
+            const newCurrentTime = status.voicePosition ? status.voicePosition / 1000 : 0;
+            const newProgress = newDuration > 0 ? newCurrentTime / newDuration : 0;
 
             setDuration(newDuration);
             setCurrentTime(newCurrentTime);
@@ -157,9 +140,7 @@ export default function Player({
             {audiobook.title}
           </Text>
           <View style={styles.progressBarMini}>
-            <View
-              style={[styles.progressFill, { width: `${progress * 100}%` }]}
-            />
+            <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
           </View>
         </View>
 
@@ -170,11 +151,7 @@ export default function Player({
             togglePlayback();
           }}
         >
-          {isPlaying ? (
-            <Pause size={20} color={Colors.white} />
-          ) : (
-            <Play size={20} color={Colors.white} />
-          )}
+          {isPlaying ? <Pause size={20} color={Colors.white} /> : <Play size={20} color={Colors.white} />}
         </Pressable>
       </Pressable>
     );
@@ -211,9 +188,7 @@ export default function Player({
 
         <View style={styles.timeLabels}>
           <Text style={styles.timeLabel}>{formatTime(currentTime)}</Text>
-          <Text style={styles.timeLabel}>
-            -{formatTime(duration - currentTime)}
-          </Text>
+          <Text style={styles.timeLabel}>-{formatTime(duration - currentTime)}</Text>
         </View>
       </View>
 
@@ -224,11 +199,7 @@ export default function Player({
           </Pressable>
 
           <Pressable style={styles.playPauseButton} onPress={togglePlayback}>
-            {isPlaying ? (
-              <Pause size={28} color={Colors.white} />
-            ) : (
-              <Play size={28} color={Colors.white} />
-            )}
+            {isPlaying ? <Pause size={28} color={Colors.white} /> : <Play size={28} color={Colors.white} />}
           </Pressable>
 
           <Pressable style={styles.skipButton} onPress={handleSkipForward}>

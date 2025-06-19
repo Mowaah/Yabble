@@ -1,4 +1,5 @@
 import { Audio } from 'expo-av';
+import { AUDIO_CONSTANTS } from '../constants/AudioConstants';
 
 interface AudioManager {
   backgroundMusic: Audio.Sound | null;
@@ -6,6 +7,8 @@ interface AudioManager {
   volume: number;
   backgroundVolume: number;
   isInitialized: boolean;
+  currentVoiceUrl: string | null;
+  isPlaying: boolean;
 }
 
 class AudioEffectsManager {
@@ -13,9 +16,11 @@ class AudioEffectsManager {
   private manager: AudioManager = {
     backgroundMusic: null,
     voiceAudio: null,
-    volume: 0.5,
-    backgroundVolume: 0.3, // Lower volume for background
+    volume: AUDIO_CONSTANTS.DEFAULT_VOICE_VOLUME,
+    backgroundVolume: AUDIO_CONSTANTS.DEFAULT_BACKGROUND_VOLUME,
     isInitialized: false,
+    currentVoiceUrl: null,
+    isPlaying: false,
   };
 
   private constructor() {
@@ -33,10 +38,7 @@ class AudioEffectsManager {
       });
       this.manager.isInitialized = true;
     } catch (error) {
-      console.error(
-        'AudioEffectsManager: Error initializing audio mode:',
-        error
-      );
+      console.error('AudioEffectsManager: Error initializing audio mode:', error);
     }
   }
 
@@ -59,10 +61,7 @@ class AudioEffectsManager {
           }
           await this.manager.backgroundMusic.unloadAsync();
         } catch (error) {
-          console.warn(
-            'AudioEffectsManager: Warning unloading existing background music:',
-            error
-          );
+          console.warn('AudioEffectsManager: Warning unloading existing background music:', error);
         }
         this.manager.backgroundMusic = null;
       }
@@ -70,7 +69,7 @@ class AudioEffectsManager {
       const { sound } = await Audio.Sound.createAsync(
         { uri },
         {
-          isLooping: true, // Ensure background music loops
+          isLooping: true,
           volume: this.manager.backgroundVolume,
           shouldPlay: false,
         }
@@ -78,47 +77,59 @@ class AudioEffectsManager {
 
       this.manager.backgroundMusic = sound;
     } catch (error) {
-      console.error(
-        'AudioEffectsManager: Error loading background music:',
-        error
-      );
+      console.error('AudioEffectsManager: Error loading background music:', error);
       throw error;
     }
   }
 
-  async loadVoiceAudio(uri: string): Promise<void> {
+  async loadVoiceAudio(url: string): Promise<void> {
     try {
       await this.ensureInitialized();
 
-      // Safely unload any existing voice audio
+      // If same URL is already loaded, don't reload
+      if (this.manager.voiceAudio && this.manager.currentVoiceUrl === url) {
+        return;
+      }
+
+      // Clean up existing voice audio
       if (this.manager.voiceAudio) {
         try {
-          const status = await this.manager.voiceAudio.getStatusAsync();
-          if (status.isLoaded) {
-            await this.manager.voiceAudio.stopAsync();
-          }
           await this.manager.voiceAudio.unloadAsync();
         } catch (error) {
-          console.warn(
-            'AudioEffectsManager: Warning unloading existing voice audio:',
-            error
-          );
+          console.warn('Error unloading existing voice audio:', error);
         }
         this.manager.voiceAudio = null;
+        this.manager.currentVoiceUrl = null;
       }
 
       const { sound } = await Audio.Sound.createAsync(
-        { uri },
+        { uri: url },
         {
-          isLooping: false, // Voice audio should not loop
+          isLooping: false,
           volume: this.manager.volume,
           shouldPlay: false,
         }
       );
 
       this.manager.voiceAudio = sound;
+      this.manager.currentVoiceUrl = url;
+      this.manager.isPlaying = false;
+
+      // Set up a single, clean event handler
+      this.manager.voiceAudio.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded) {
+          // Update playing state based on actual audio status
+          this.manager.isPlaying = status.isPlaying || false;
+
+          // When voice finishes, stop background music and reset state
+          if (status.didJustFinish) {
+            this.manager.isPlaying = false;
+            this.stopBackgroundMusic().catch(console.error);
+          }
+        }
+      });
     } catch (error) {
-      console.error('AudioEffectsManager: Error loading voice audio:', error);
+      console.error('Error loading voice audio:', error);
       throw error;
     }
   }
@@ -126,13 +137,11 @@ class AudioEffectsManager {
   async playBackgroundMusic(): Promise<void> {
     try {
       if (this.manager.backgroundMusic) {
+        await this.manager.backgroundMusic.setVolumeAsync(this.manager.backgroundVolume);
         await this.manager.backgroundMusic.playAsync();
       }
     } catch (error) {
-      console.error(
-        'AudioEffectsManager: Error playing background music:',
-        error
-      );
+      console.error('AudioEffectsManager: Error playing background music:', error);
       throw error;
     }
   }
@@ -140,14 +149,9 @@ class AudioEffectsManager {
   async playVoiceAudio(): Promise<void> {
     try {
       if (this.manager.voiceAudio) {
-        // Set up completion handler for voice-only playback
-        this.manager.voiceAudio.setOnPlaybackStatusUpdate((status) => {
-          if (status.isLoaded && status.didJustFinish) {
-            this.stopBackgroundMusic();
-          }
-        });
-
+        await this.manager.voiceAudio.setVolumeAsync(this.manager.volume);
         await this.manager.voiceAudio.playAsync();
+        this.manager.isPlaying = true;
       }
     } catch (error) {
       console.error('AudioEffectsManager: Error playing voice audio:', error);
@@ -157,35 +161,14 @@ class AudioEffectsManager {
 
   async playMixedAudio(): Promise<void> {
     try {
-      // Start background music first if available (it will loop)
+      // Start background music first if available
       if (this.manager.backgroundMusic) {
-        await this.manager.backgroundMusic.playAsync();
+        await this.playBackgroundMusic();
       }
 
-      // Start voice audio and make it the master for duration
+      // Start voice audio
       if (this.manager.voiceAudio) {
-        // Set up voice audio completion handler to stop background music
-        this.manager.voiceAudio.setOnPlaybackStatusUpdate((status) => {
-          if (status.isLoaded && status.didJustFinish) {
-            // When voice audio finishes, stop background music immediately
-            this.stopBackgroundMusic();
-          }
-        });
-
-        // Start voice audio slightly after to ensure background is playing
-        setTimeout(async () => {
-          if (this.manager.voiceAudio) {
-            await this.manager.voiceAudio.playAsync();
-          }
-        }, 100);
-      } else if (this.manager.backgroundMusic) {
-        // If only background music, don't loop indefinitely in preview
-        this.manager.backgroundMusic.setOnPlaybackStatusUpdate((status) => {
-          if (status.isLoaded && status.didJustFinish) {
-            // For preview mode, stop after one loop if no voice
-            this.stopBackgroundMusic();
-          }
-        });
+        await this.playVoiceAudio();
       }
     } catch (error) {
       console.error('AudioEffectsManager: Error playing mixed audio:', error);
@@ -197,16 +180,12 @@ class AudioEffectsManager {
     try {
       if (this.manager.backgroundMusic) {
         const status = await this.manager.backgroundMusic.getStatusAsync();
-        if (status.isLoaded) {
+        if (status.isLoaded && status.isPlaying) {
           await this.manager.backgroundMusic.stopAsync();
         }
       }
     } catch (error) {
-      // Silently handle errors for sounds that are not loaded or in inconsistent state
-      console.warn(
-        'AudioEffectsManager: Background music stop warning:',
-        error
-      );
+      console.warn('AudioEffectsManager: Background music stop warning:', error);
     }
   }
 
@@ -214,29 +193,32 @@ class AudioEffectsManager {
     try {
       if (this.manager.voiceAudio) {
         const status = await this.manager.voiceAudio.getStatusAsync();
-        if (status.isLoaded) {
+        if (status.isLoaded && status.isPlaying) {
           await this.manager.voiceAudio.stopAsync();
         }
+        this.manager.isPlaying = false;
       }
     } catch (error) {
-      // Silently handle errors for sounds that are not loaded or in inconsistent state
       console.warn('AudioEffectsManager: Voice audio stop warning:', error);
     }
   }
 
   async stopAllAudio(): Promise<void> {
-    // Use Promise.allSettled to continue even if one fails
-    const results = await Promise.allSettled([
-      this.stopBackgroundMusic(),
-      this.stopVoiceAudio(),
-    ]);
+    try {
+      this.manager.isPlaying = false;
 
-    // Only log if there are actual errors (not just warnings)
-    const errors = results.filter((result) => result.status === 'rejected');
-    if (errors.length > 0) {
-      console.warn(
-        'AudioEffectsManager: Some audio stop operations had warnings'
-      );
+      if (this.manager.voiceAudio) {
+        await this.manager.voiceAudio.unloadAsync();
+        this.manager.voiceAudio = null;
+        this.manager.currentVoiceUrl = null;
+      }
+      if (this.manager.backgroundMusic) {
+        await this.manager.backgroundMusic.unloadAsync();
+        this.manager.backgroundMusic = null;
+      }
+    } catch (error) {
+      console.error('AudioEffectsManager: Error stopping all audio:', error);
+      throw error;
     }
   }
 
@@ -259,11 +241,39 @@ class AudioEffectsManager {
         await this.manager.backgroundMusic.setVolumeAsync(volume);
       }
     } catch (error) {
-      console.error(
-        'AudioEffectsManager: Error setting background volume:',
-        error
-      );
+      console.error('AudioEffectsManager: Error setting background volume:', error);
       throw error;
+    }
+  }
+
+  async seekVoice(positionMillis: number): Promise<void> {
+    if (this.manager.voiceAudio) {
+      try {
+        const status = await this.manager.voiceAudio.getStatusAsync();
+        if (status.isLoaded) {
+          const wasPlaying = status.isPlaying;
+
+          // Seek to the new position
+          await this.manager.voiceAudio.setPositionAsync(positionMillis);
+
+          // If audio was paused before seeking, make sure it stays paused
+          if (!wasPlaying && !this.manager.isPlaying) {
+            await this.manager.voiceAudio.pauseAsync();
+          }
+        }
+      } catch (error) {
+        console.error('AudioEffectsManager: Error seeking voice audio:', error);
+      }
+    }
+  }
+
+  async setRate(rate: number): Promise<void> {
+    if (this.manager.voiceAudio) {
+      try {
+        await this.manager.voiceAudio.setRateAsync(rate, true);
+      } catch (error) {
+        console.error('AudioEffectsManager: Error setting playback rate:', error);
+      }
     }
   }
 
@@ -277,6 +287,7 @@ class AudioEffectsManager {
 
   async cleanup(): Promise<void> {
     try {
+      this.manager.isPlaying = false;
       if (this.manager.backgroundMusic) {
         await this.manager.backgroundMusic.unloadAsync();
         this.manager.backgroundMusic = null;
@@ -284,6 +295,7 @@ class AudioEffectsManager {
       if (this.manager.voiceAudio) {
         await this.manager.voiceAudio.unloadAsync();
         this.manager.voiceAudio = null;
+        this.manager.currentVoiceUrl = null;
       }
     } catch (error) {
       console.error('AudioEffectsManager: Error cleaning up audio:', error);
@@ -296,25 +308,33 @@ class AudioEffectsManager {
     backgroundIsPlaying: boolean;
     voicePosition?: number;
     voiceDuration?: number;
+    hasFinished?: boolean;
   }> {
     try {
-      let voiceIsPlaying = false;
+      let voiceIsPlaying = this.manager.isPlaying;
       let backgroundIsPlaying = false;
       let voicePosition = 0;
       let voiceDuration = 0;
+      let hasFinished = false;
 
       if (this.manager.voiceAudio) {
         const voiceStatus = await this.manager.voiceAudio.getStatusAsync();
         if (voiceStatus.isLoaded) {
+          // Trust the actual audio status over our cached state
           voiceIsPlaying = voiceStatus.isPlaying || false;
+          this.manager.isPlaying = voiceIsPlaying; // Update cached state
           voicePosition = voiceStatus.positionMillis || 0;
           voiceDuration = voiceStatus.durationMillis || 0;
+
+          // Improved audio finish detection logic
+          hasFinished =
+            voiceStatus.didJustFinish ||
+            (voiceDuration > 0 && voicePosition >= voiceDuration - AUDIO_CONSTANTS.END_THRESHOLD_MS);
         }
       }
 
       if (this.manager.backgroundMusic) {
-        const backgroundStatus =
-          await this.manager.backgroundMusic.getStatusAsync();
+        const backgroundStatus = await this.manager.backgroundMusic.getStatusAsync();
         if (backgroundStatus.isLoaded) {
           backgroundIsPlaying = backgroundStatus.isPlaying || false;
         }
@@ -325,19 +345,66 @@ class AudioEffectsManager {
         backgroundIsPlaying,
         voicePosition,
         voiceDuration,
+        hasFinished,
       };
     } catch (error) {
-      console.error(
-        'AudioEffectsManager: Error getting playback status:',
-        error
-      );
+      console.error('AudioEffectsManager: Error getting playback status:', error);
       return {
         voiceIsPlaying: false,
         backgroundIsPlaying: false,
         voicePosition: 0,
         voiceDuration: 0,
+        hasFinished: false,
       };
     }
+  }
+
+  async pauseAudio(): Promise<void> {
+    try {
+      this.manager.isPlaying = false;
+      const promises = [];
+      if (this.manager.voiceAudio) {
+        promises.push(this.manager.voiceAudio.pauseAsync());
+      }
+      if (this.manager.backgroundMusic) {
+        promises.push(this.manager.backgroundMusic.pauseAsync());
+      }
+      await Promise.allSettled(promises);
+    } catch (error) {
+      console.error('AudioEffectsManager: Error pausing audio:', error);
+    }
+  }
+
+  async resumeAudio(): Promise<void> {
+    try {
+      // Check if audio is actually loaded and paused before resuming
+      if (this.manager.voiceAudio) {
+        const voiceStatus = await this.manager.voiceAudio.getStatusAsync();
+        if (voiceStatus.isLoaded && !voiceStatus.isPlaying) {
+          await this.manager.voiceAudio.playAsync();
+          this.manager.isPlaying = true;
+        }
+      }
+
+      if (this.manager.backgroundMusic) {
+        const bgStatus = await this.manager.backgroundMusic.getStatusAsync();
+        if (bgStatus.isLoaded && !bgStatus.isPlaying) {
+          await this.manager.backgroundMusic.playAsync();
+        }
+      }
+    } catch (error) {
+      console.error('AudioEffectsManager: Error resuming audio:', error);
+      this.manager.isPlaying = false;
+    }
+  }
+
+  getCurrentVoiceUrl(): string | null {
+    return this.manager.currentVoiceUrl;
+  }
+
+  // Helper method to check if audio is currently playing
+  isCurrentlyPlaying(): boolean {
+    return this.manager.isPlaying;
   }
 
   static getInstance(): AudioEffectsManager {
