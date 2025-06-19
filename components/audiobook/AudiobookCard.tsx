@@ -12,7 +12,18 @@ import {
   Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Play, Pause, Download, Share2, Trash2, Heart, Upload, MoreHorizontal } from 'lucide-react-native';
+import {
+  Play,
+  Pause,
+  Download,
+  Share2,
+  Trash2,
+  Heart,
+  Upload,
+  MoreHorizontal,
+  Check,
+  CheckSquare,
+} from 'lucide-react-native';
 import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
 import Card from '../ui/Card';
@@ -32,6 +43,10 @@ interface AudiobookCardProps {
   onDownload?: () => void;
   onDelete?: () => void;
   onPublishToHub?: () => void;
+  isSelectionMode?: boolean;
+  isSelected?: boolean;
+  onSelect?: (bookId: string) => void;
+  onInitiateSelection?: (bookId: string) => void;
 }
 
 export default function AudiobookCard({
@@ -43,6 +58,10 @@ export default function AudiobookCard({
   onDownload,
   onDelete,
   onPublishToHub,
+  isSelectionMode = false,
+  isSelected = false,
+  onSelect,
+  onInitiateSelection,
 }: AudiobookCardProps) {
   const router = useRouter();
   const [isPlaying, setIsPlaying] = useState(false);
@@ -59,6 +78,12 @@ export default function AudiobookCard({
   ]);
 
   const handlePress = () => {
+    // In selection mode, handle selection instead of navigation
+    if (isSelectionMode) {
+      onSelect?.(book.id);
+      return;
+    }
+
     // If it's a completed audiobook, go to the player
     if (book.status === 'completed') {
       router.push(`/library/${book.id}`);
@@ -305,9 +330,20 @@ export default function AudiobookCard({
     return () => clearInterval(interval);
   }, [isPlaying, book.audio_url]);
 
+  const cardStyle = [styles.container, ...(isSelected ? [styles.selectedContainer] : [])];
+
   return (
-    <Card onPress={handlePress} style={styles.container}>
+    <Card onPress={handlePress} style={cardStyle}>
       <View style={styles.cardContent}>
+        {/* Selection Checkbox */}
+        {isSelectionMode && (
+          <View style={styles.selectionCheckbox}>
+            <View style={[styles.checkbox, isSelected && styles.checkedBox]}>
+              {isSelected && <Check size={16} color={Colors.white} />}
+            </View>
+          </View>
+        )}
+
         {/* Book Cover */}
         <Image
           source={{
@@ -442,6 +478,16 @@ export default function AudiobookCard({
       >
         <Pressable style={styles.modalOverlay} onPress={() => setShowActionsMenu(false)}>
           <View style={styles.actionsMenu}>
+            {!isSelectionMode && (
+              <Pressable
+                style={styles.menuItem}
+                onPress={() => handleActionPress(() => onInitiateSelection?.(book.id))}
+              >
+                <CheckSquare size={16} color={Colors.primary} />
+                <Text style={[styles.menuText, { color: Colors.primary }]}>Select</Text>
+              </Pressable>
+            )}
+
             {book.status === 'completed' && (
               <Pressable style={styles.menuItem} onPress={() => handleActionPress(onPublishToHub!)}>
                 <Upload size={16} color={Colors.gray[700]} />
@@ -688,5 +734,30 @@ const styles = StyleSheet.create({
   },
   sparkle4: {
     transform: [{ translateX: 15 }, { translateY: 20 }],
+  },
+  selectedContainer: {
+    borderColor: Colors.primary,
+    borderWidth: 2,
+    backgroundColor: `${Colors.primary}05`,
+  },
+  selectionCheckbox: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    zIndex: 10,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: Colors.gray[300],
+    backgroundColor: Colors.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkedBox: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primary,
   },
 });

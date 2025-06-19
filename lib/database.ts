@@ -68,6 +68,21 @@ export async function deleteAudiobook(id: string) {
   return true;
 }
 
+export async function bulkDeleteAudiobooks(ids: string[]) {
+  if (ids.length === 0) {
+    throw new Error('No audiobooks selected for deletion');
+  }
+
+  const { error } = await supabase.from('audiobooks').delete().in('id', ids);
+
+  if (error) {
+    console.error('Bulk delete error:', error);
+    throw new Error('Failed to delete selected audiobooks');
+  }
+
+  return true;
+}
+
 // User Profiles
 export async function getUserProfile(userId: string) {
   try {

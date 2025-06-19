@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { StyleSheet, Text, View, FlatList, Pressable, ActivityIndicator, Platform, Modal } from 'react-native';
-import { Search, Headphones, CheckCircle2, XCircle } from 'lucide-react-native';
+import { StyleSheet, Text, View, FlatList, Pressable, ActivityIndicator, Platform, Modal, Alert } from 'react-native';
+import { Search, Headphones, CheckCircle2, XCircle, Trash2, X, MoreHorizontal } from 'lucide-react-native';
 import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
 import AudiobookCard from '../../components/audiobook/AudiobookCard';
@@ -12,7 +12,7 @@ import { prepareAudioFile, FilePreparationError } from '../../utils/fileUtils';
 import { saveAudioToDevice, shareAudioFile, MediaError } from '../../utils/mediaUtils';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { audioEffects } from '../../lib/audio';
-import { updateAudiobook } from '../../lib/database';
+import { updateAudiobook, bulkDeleteAudiobooks } from '../../lib/database';
 import { shouldAutoFixStatus } from '../../utils/progressUtils';
 import { AUDIO_CONSTANTS } from '../../constants/AudioConstants';
 
@@ -31,6 +31,11 @@ export default function LibraryScreen() {
   const [showModal, setShowModal] = useState(false);
   const [modalStatus, setModalStatus] = useState<ModalStatus>('idle');
   const [modalMessage, setModalMessage] = useState('');
+
+  // Bulk selection state
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedBooks, setSelectedBooks] = useState<string[]>([]);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   // Fix drafts that should actually be completed - optimized logic
   const fixIncompleteStatuses = useCallback(async () => {
@@ -97,6 +102,67 @@ export default function LibraryScreen() {
     setFavorites(
       (prev) => (prev.includes(bookId) ? prev.filter((id) => id !== bookId) : [bookId, ...prev]) // Add to beginning to show at top
     );
+  };
+
+  // Bulk selection functions
+  const toggleSelectionMode = () => {
+    setIsSelectionMode((prev) => !prev);
+    setSelectedBooks([]);
+  };
+
+  const initiateSelectionMode = (bookId: string) => {
+    setIsSelectionMode(true);
+    setSelectedBooks([bookId]);
+  };
+
+  const selectAllBooks = () => {
+    const sortedBooks = getSortedBooks();
+    setSelectedBooks(sortedBooks.map((book) => book.id));
+  };
+
+  const clearSelection = () => {
+    setSelectedBooks([]);
+  };
+
+  const toggleBookSelection = (bookId: string) => {
+    setSelectedBooks((prev) => (prev.includes(bookId) ? prev.filter((id) => id !== bookId) : [...prev, bookId]));
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedBooks.length === 0) return;
+
+    const confirmed =
+      Platform.OS === 'web'
+        ? window.confirm(`Are you sure you want to delete ${selectedBooks.length} audiobook(s)?`)
+        : await new Promise((resolve) => {
+            Alert.alert('Delete Audiobooks', `Are you sure you want to delete ${selectedBooks.length} audiobook(s)?`, [
+              { text: 'Cancel', onPress: () => resolve(false) },
+              {
+                text: 'Delete',
+                style: 'destructive',
+                onPress: () => resolve(true),
+              },
+            ]);
+          });
+
+    if (confirmed) {
+      try {
+        setIsBulkDeleting(true);
+        await bulkDeleteAudiobooks(selectedBooks);
+        await refreshAudiobooks();
+        setSelectedBooks([]);
+        setIsSelectionMode(false);
+      } catch (error) {
+        const errorMessage = 'Failed to delete selected audiobooks';
+        if (Platform.OS === 'web') {
+          alert(errorMessage);
+        } else {
+          Alert.alert('Error', errorMessage);
+        }
+      } finally {
+        setIsBulkDeleting(false);
+      }
+    }
   };
 
   const getSortedBooks = () => {
@@ -302,6 +368,10 @@ export default function LibraryScreen() {
       onPublishToHub={() => {
         // Placeholder for publish to hub functionality
       }}
+      isSelectionMode={isSelectionMode}
+      isSelected={selectedBooks.includes(item.id)}
+      onSelect={toggleBookSelection}
+      onInitiateSelection={initiateSelectionMode}
     />
   );
 
@@ -326,20 +396,67 @@ export default function LibraryScreen() {
       </Modal>
 
       <View style={styles.header}>
-        <Text style={styles.title}>Your Library</Text>
-        <Input
-          placeholder="Search audiobooks..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          containerStyle={styles.searchContainer}
-          leftIcon={<Search size={18} color={Colors.gray[400]} />}
-        />
+        {!isSelectionMode ? (
+          <>
+            <Text style={styles.title}>Your Library</Text>
+            <Input
+              placeholder="Search audiobooks..."
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              containerStyle={styles.searchContainer}
+              leftIcon={<Search size={18} color={Colors.gray[400]} />}
+            />
 
-        <View style={styles.filterContainer}>
-          {renderFilterTab('Completed', 'completed', getFilterCount('completed'))}
-          {renderFilterTab('Drafts', 'draft', getFilterCount('draft'))}
-          {renderFilterTab('Saved', 'saved', getFilterCount('saved'))}
-        </View>
+            <View style={styles.filterContainer}>
+              {renderFilterTab('Completed', 'completed', getFilterCount('completed'))}
+              {renderFilterTab('Drafts', 'draft', getFilterCount('draft'))}
+              {renderFilterTab('Saved', 'saved', getFilterCount('saved'))}
+            </View>
+          </>
+        ) : (
+          <View style={styles.bulkActionHeader}>
+            {/* Selection Mode Header */}
+            <View style={styles.selectionHeader}>
+              <Pressable style={styles.cancelButton} onPress={toggleSelectionMode}>
+                <X size={20} color={Colors.gray[600]} />
+              </Pressable>
+              <View style={styles.selectionInfo}>
+                <Text style={styles.selectionTitle}>Select Items</Text>
+                <Text style={styles.selectionCount}>
+                  {selectedBooks.length} of {sortedBooks.length} selected
+                </Text>
+              </View>
+              <View style={styles.headerSpacer} />
+            </View>
+
+            {/* Action Buttons */}
+            <View style={styles.actionButtonsContainer}>
+              <View style={styles.leftActions}>
+                <Pressable style={styles.selectAllButton} onPress={selectAllBooks}>
+                  <Text style={styles.selectAllText}>Select All</Text>
+                </Pressable>
+                <Pressable style={styles.clearButton} onPress={clearSelection}>
+                  <Text style={styles.clearText}>Clear</Text>
+                </Pressable>
+              </View>
+
+              <Pressable
+                style={[styles.deleteButton, selectedBooks.length === 0 && styles.disabledButton]}
+                onPress={handleBulkDelete}
+                disabled={selectedBooks.length === 0 || isBulkDeleting}
+              >
+                {isBulkDeleting ? (
+                  <ActivityIndicator size="small" color={Colors.white} />
+                ) : (
+                  <>
+                    <Trash2 size={18} color={Colors.white} />
+                    <Text style={styles.deleteButtonText}>Delete ({selectedBooks.length})</Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        )}
       </View>
 
       <FlatList
@@ -401,14 +518,102 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontWeight: '600',
   },
-  filterButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.accent,
+  bulkActionHeader: {
+    backgroundColor: Colors.white,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.gray[200],
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+  },
+  selectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  cancelButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.gray[100],
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 'auto',
+  },
+  selectionInfo: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  selectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.primary,
+    marginBottom: 2,
+  },
+  selectionCount: {
+    fontSize: 12,
+    color: Colors.gray[500],
+    fontWeight: '500',
+  },
+  headerSpacer: {
+    width: 40,
+  },
+  actionButtonsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  leftActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  selectAllButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: Layout.borderRadius.md,
+    backgroundColor: Colors.primary + '15',
+    borderWidth: 1,
+    borderColor: Colors.primary + '30',
+  },
+  selectAllText: {
+    fontSize: 14,
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  clearButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: Layout.borderRadius.md,
+    backgroundColor: Colors.gray[100],
+    borderWidth: 1,
+    borderColor: Colors.gray[200],
+  },
+  clearText: {
+    fontSize: 14,
+    color: Colors.gray[600],
+    fontWeight: '600',
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: Layout.borderRadius.md,
+    backgroundColor: Colors.error,
+    shadowColor: Colors.error,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  deleteButtonText: {
+    fontSize: 14,
+    color: Colors.white,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  disabledButton: {
+    backgroundColor: Colors.gray[300],
+    shadowOpacity: 0,
+    elevation: 0,
   },
   listContent: {
     padding: Layout.spacing.md,
