@@ -46,42 +46,25 @@ export const prepareAudioFile = async (
       await FileSystem.writeAsStringAsync(localFileUri, base64Data, {
         encoding: FileSystem.EncodingType.Base64,
       });
-      console.log(
-        `File written from Data URI for ${operationName}: ${localFileUri}`
-      );
+      console.log(`File written from Data URI for ${operationName}: ${localFileUri}`);
       return localFileUri;
     } catch (e: any) {
-      console.error(
-        `Error writing Data URI for ${operationName} (${title}):`,
-        e
-      );
-      throw new FilePreparationError(
-        `Failed to prepare audio from Data URI: ${e.message}`
-      );
+      console.error(`Error writing Data URI for ${operationName} (${title}):`, e);
+      throw new FilePreparationError(`Failed to prepare audio from Data URI: ${e.message}`);
     }
   } else {
     try {
-      const downloadResult = await FileSystem.downloadAsync(
-        audioUrl,
-        localFileUri
-      );
+      const downloadResult = await FileSystem.downloadAsync(audioUrl, localFileUri);
       if (downloadResult.status !== 200) {
-        console.error(
-          `Download failed for ${operationName} (${title}): Status ${downloadResult.status}`
-        );
+        console.error(`Download failed for ${operationName} (${title}): Status ${downloadResult.status}`);
         throw new FilePreparationError(
           `Failed to download audio for ${operationName}. Status: ${downloadResult.status}`
         );
       }
-      console.log(
-        `File downloaded for ${operationName} (${title}): ${downloadResult.uri}`
-      );
+      console.log(`File downloaded for ${operationName} (${title}): ${downloadResult.uri}`);
       return downloadResult.uri; // Use the URI from downloadResult
     } catch (e: any) {
-      console.error(
-        `Error downloading audio for ${operationName} (${title}):`,
-        e
-      );
+      console.error(`Error downloading audio for ${operationName} (${title}):`, e);
       throw new FilePreparationError(`Failed to download audio: ${e.message}`);
     }
   }
@@ -103,11 +86,7 @@ export const isDOCXFile = (mimeType?: string, fileName?: string): boolean => {
     return true;
   }
 
-  if (
-    fileName &&
-    (fileName.toLowerCase().endsWith('.docx') ||
-      fileName.toLowerCase().endsWith('.doc'))
-  ) {
+  if (fileName && (fileName.toLowerCase().endsWith('.docx') || fileName.toLowerCase().endsWith('.doc'))) {
     return true;
   }
 
@@ -156,10 +135,7 @@ export const isTextFile = (mimeType?: string, fileName?: string): boolean => {
  * @param fileName The name of the file
  * @returns string
  */
-export const getFileTypeDescription = (
-  mimeType?: string,
-  fileName?: string
-): string => {
+export const getFileTypeDescription = (mimeType?: string, fileName?: string): string => {
   if (isDOCXFile(mimeType, fileName)) {
     return 'Word Document';
   }

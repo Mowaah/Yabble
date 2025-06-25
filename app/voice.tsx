@@ -1,5 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, ScrollView, Pressable, Alert, Animated, Vibration } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+  ScrollView,
+  Pressable,
+  Alert,
+  Animated,
+  Vibration,
+  Modal,
+  ActivityIndicator,
+} from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { ChevronLeft, Mic, Sparkles, Settings, ChevronDown, ChevronUp } from 'lucide-react-native';
 import Slider from '@react-native-community/slider';
@@ -142,6 +153,20 @@ export default function VoiceScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <Modal transparent={true} animationType="fade" visible={isProcessing}>
+        <View style={styles.modalBackground}>
+          <View style={styles.modalContent}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+            <Text style={styles.modalText}>Generating your audiobook...</Text>
+            <View style={styles.progressContainer}>
+              <View style={[styles.progressBar, { width: `${progress}%` }]} />
+            </View>
+            <Text style={styles.modalProgress}>{`${Math.round(progress)}%`}</Text>
+            <Text style={styles.modalSubText}>This may take a moment. Please don't close the app.</Text>
+          </View>
+        </View>
+      </Modal>
+
       <Animated.View style={[styles.innerContainer, { opacity: fadeAnim }]}>
         {/* Header */}
         <View style={styles.header}>
@@ -271,11 +296,11 @@ export default function VoiceScreen() {
         <View style={styles.footer}>
           <Button title="Back" onPress={handleBack} variant="ghost" style={styles.backFooterButton} />
           <Button
-            title={isProcessing ? `Generating Voice... ${Math.round(progress)}%` : 'Generate Voice'}
+            title={isProcessing ? `Generating...` : 'Generate Voice'}
             onPress={handleNext}
             style={styles.generateButton}
             icon={isProcessing ? undefined : <Sparkles size={18} color={Colors.white} />}
-            loading={isProcessing && progress < 5}
+            loading={isProcessing}
             disabled={!selectedVoice || isProcessing}
           />
         </View>
@@ -447,5 +472,57 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     borderRadius: 12,
     minHeight: 50,
+  },
+  modalBackground: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(15, 15, 35, 0.8)',
+  },
+  modalContent: {
+    backgroundColor: Colors.white,
+    padding: Layout.spacing.lg,
+    borderRadius: Layout.borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 5,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    width: '80%',
+    minHeight: 150,
+  },
+  modalText: {
+    marginTop: Layout.spacing.md,
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.primary,
+    textAlign: 'center',
+  },
+  progressContainer: {
+    width: '100%',
+    height: 8,
+    backgroundColor: Colors.gray[200],
+    borderRadius: 4,
+    marginTop: Layout.spacing.lg,
+    overflow: 'hidden',
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: Colors.primary,
+    borderRadius: 4,
+  },
+  modalProgress: {
+    marginTop: Layout.spacing.sm,
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.primary,
+  },
+  modalSubText: {
+    marginTop: Layout.spacing.md,
+    fontSize: 14,
+    color: Colors.gray[500],
+    textAlign: 'center',
   },
 });

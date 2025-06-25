@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, ScrollView, Pressable, Animated, Alert } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, Pressable, Animated, Alert, ActivityIndicator, Modal } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { ChevronLeft, Music, Play, Volume2, Pause, Sparkles, Headphones } from 'lucide-react-native';
@@ -28,6 +28,8 @@ export default function AudioScreen() {
   });
   const [isPlaying, setIsPlaying] = useState(false);
   const [playingPreviewId, setPlayingPreviewId] = useState<string | null>(null);
+  const [loadingPreviewId, setLoadingPreviewId] = useState<string | null>(null);
+  const [isCompleting, setIsCompleting] = useState(false);
   const [waveAnimations] = useState({
     bar1: new Animated.Value(0.3),
     bar2: new Animated.Value(0.7),
@@ -93,20 +95,21 @@ export default function AudioScreen() {
         return;
       }
 
-      // Stop any currently playing preview
       if (playingPreviewId) {
         await audioEffects.stopAllAudio();
         stopWaveAnimation();
       }
 
-      setPlayingPreviewId(effectId);
-      startWaveAnimation();
+      setLoadingPreviewId(effectId);
+      setPlayingPreviewId(null);
 
-      // Load and play the background audio
       await audioEffects.loadBackgroundMusic(previewUrl);
       await audioEffects.playBackgroundMusic();
 
-      // Monitor playback to update UI when finished
+      setLoadingPreviewId(null);
+      setPlayingPreviewId(effectId);
+      startWaveAnimation();
+
       const checkStatus = async () => {
         const status = await audioEffects.getPlaybackStatus();
         if (!status.backgroundIsPlaying) {
@@ -128,18 +131,15 @@ export default function AudioScreen() {
   const handlePlayMixedPreview = async () => {
     try {
       if (isPlaying) {
-        // Stop all audio
         await audioEffects.stopAllAudio();
         setIsPlaying(false);
         return;
       }
 
-      // Load voice audio if available
       if (voiceAudio) {
         await audioEffects.loadVoiceAudio(voiceAudio as string);
       }
 
-      // Load background effect if selected
       if (selectedEffect) {
         const effect = mockAudioEffects.find((e) => e.id === selectedEffect);
         if (effect?.previewUrl) {
@@ -147,21 +147,19 @@ export default function AudioScreen() {
         }
       }
 
-      // Play mixed audio (voice controls the duration)
       await audioEffects.playMixedAudio();
       setIsPlaying(true);
 
-      // Monitor playback status to update UI when audio ends
       const checkStatus = async () => {
         const status = await audioEffects.getPlaybackStatus();
         if (!status.voiceIsPlaying && !status.backgroundIsPlaying) {
           setIsPlaying(false);
         } else if (isPlaying) {
-          setTimeout(checkStatus, AUDIO_CONSTANTS.STATUS_CHECK_INTERVAL_PLAYER); // Check every 500ms
+          setTimeout(checkStatus, AUDIO_CONSTANTS.STATUS_CHECK_INTERVAL_PLAYER);
         }
       };
 
-      setTimeout(checkStatus, 1000); // Start checking after 1 second
+      setTimeout(checkStatus, 1000);
     } catch (error) {
       console.error('Error playing mixed preview:', error);
       setIsPlaying(false);
@@ -173,7 +171,6 @@ export default function AudioScreen() {
       if (!isFinite(newVolume) || isNaN(newVolume)) {
         return;
       }
-
       const validVolume = Math.max(0, Math.min(1, newVolume));
       setVolume(validVolume);
     } catch (error) {
@@ -186,7 +183,6 @@ export default function AudioScreen() {
       if (!isFinite(newVolume) || isNaN(newVolume)) {
         return;
       }
-
       const validVolume = Math.max(0, Math.min(1, newVolume));
       await audioEffects.setVolume(validVolume);
     } catch (error) {
@@ -199,7 +195,6 @@ export default function AudioScreen() {
       if (!isFinite(newVolume) || isNaN(newVolume)) {
         return;
       }
-
       const validVolume = Math.max(0, Math.min(1, newVolume));
       setBackgroundVolume(validVolume);
     } catch (error) {
@@ -212,7 +207,6 @@ export default function AudioScreen() {
       if (!isFinite(newVolume) || isNaN(newVolume)) {
         return;
       }
-
       const validVolume = Math.max(0, Math.min(1, newVolume));
       await audioEffects.setBackgroundVolume(validVolume);
     } catch (error) {
@@ -221,19 +215,13 @@ export default function AudioScreen() {
   };
 
   const handleNext = async () => {
+    setIsCompleting(true);
     try {
-      // Stop any playing preview
       await backgroundSelectorRef.current?.stopPreview();
-
       if (id) {
         const audiobookId = Array.isArray(id) ? id[0] : id;
-        // Fetch current audiobook data to get existing text_content
         const { data: audiobook, error: fetchError } = await getAudiobook(audiobookId);
-
-        if (fetchError) {
-          throw fetchError;
-        }
-
+        if (fetchError) throw fetchError;
         if (audiobook) {
           let textContent;
           try {
@@ -241,39 +229,26 @@ export default function AudioScreen() {
           } catch {
             textContent = {};
           }
-
-          // Update the background effect
           textContent.backgroundEffect = selectedEffect;
-
           const { voiceDuration = 0 } = await audioEffects.getPlaybackStatus();
-
-          // Update audiobook with background effect and mark as completed
           const result = await updateAudiobook(audiobookId, {
             text_content: JSON.stringify(textContent),
             status: 'completed',
             duration: Math.round(voiceDuration / 1000),
           });
-
-          if (result.error) {
-            throw result.error;
-          }
+          if (result.error) throw result.error;
+          setTimeout(() => router.push('/library'), 500);
         } else {
           throw new Error('No audiobook data found');
         }
       } else {
         throw new Error('No ID parameter provided');
       }
-
-      // Small delay to ensure database update propagates before navigating
-      setTimeout(() => {
-        router.push('/library');
-      }, 500);
     } catch (error) {
       console.error('Error updating audiobook:', error);
-      // Even on error, go back to library after delay
-      setTimeout(() => {
-        router.push('/library');
-      }, 500);
+      Alert.alert('Error', 'Could not complete the audiobook. Please try again.');
+    } finally {
+      setIsCompleting(false);
     }
   };
 
@@ -281,7 +256,6 @@ export default function AudioScreen() {
     router.back();
   };
 
-  // Cleanup audio when component unmounts
   useEffect(() => {
     return () => {
       audioEffects.cleanup();
@@ -302,26 +276,30 @@ export default function AudioScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <Modal transparent={true} animationType="fade" visible={isCompleting}>
+        <View style={styles.modalBackground}>
+          <View style={styles.modalContent}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+            <Text style={styles.modalText}>Finalizing your audiobook...</Text>
+          </View>
+        </View>
+      </Modal>
       <View style={styles.container}>
         <View style={styles.header}>
           <Pressable style={styles.backButton} onPress={handleBack}>
             <ChevronLeft size={24} color={Colors.primary} />
           </Pressable>
-
           <View style={styles.headerCenter}>
             <Music size={20} color={Colors.primary} />
             <Text style={styles.headerTitle}>Background Audio</Text>
           </View>
-
           <View style={styles.headerRight} />
         </View>
-
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
         >
-          {/* Step 1: Choose Background Audio */}
           <View style={styles.stepCard}>
             <View style={styles.stepHeader}>
               <View style={styles.stepNumber}>
@@ -332,8 +310,6 @@ export default function AudioScreen() {
                 <Text style={styles.stepDesc}>Select music or ambient sounds (optional)</Text>
               </View>
             </View>
-
-            {/* No Background Option - Prominent */}
             <Pressable
               style={[styles.noneOptionCard, !selectedEffect && styles.selectedNoneCard]}
               onPress={() => setSelectedEffect(null)}
@@ -350,29 +326,15 @@ export default function AudioScreen() {
                 </View>
               )}
             </Pressable>
-
-            {/* Categories */}
             {['music', 'ambient', 'sound_effect'].map((category) => {
               const categoryEffects = mockAudioEffects.filter((e) => e.category === category);
               if (categoryEffects.length === 0) return null;
-
               const categoryInfo = {
-                music: {
-                  title: '🎵 Background Music',
-                  desc: 'Instrumental tracks',
-                },
-                ambient: {
-                  title: '🌊 Ambient Sounds',
-                  desc: 'Nature and environment',
-                },
-                sound_effect: {
-                  title: '🔊 Sound Effects',
-                  desc: 'Specific audio effects',
-                },
+                music: { title: '🎵 Background Music', desc: 'Instrumental tracks' },
+                ambient: { title: '🌊 Ambient Sounds', desc: 'Nature and environment' },
+                sound_effect: { title: '🔊 Sound Effects', desc: 'Specific audio effects' },
               }[category as 'music' | 'ambient' | 'sound_effect'];
-
               if (!categoryInfo) return null;
-
               return (
                 <View key={category} style={styles.categorySection}>
                   <View style={styles.categoryHeader}>
@@ -380,108 +342,105 @@ export default function AudioScreen() {
                     <Text style={styles.categoryCount}>{categoryEffects.length}</Text>
                   </View>
                   <Text style={styles.categoryDesc}>{categoryInfo.desc}</Text>
-
                   <View style={styles.audioGrid}>
-                    {categoryEffects.map((effect) => (
-                      <Pressable
-                        key={effect.id}
-                        style={[styles.audioCard, selectedEffect === effect.id && styles.selectedAudioCard]}
-                        onPress={() => handleSelectEffect(effect.id)}
-                      >
-                        {/* Audio Name */}
-                        <Text
-                          style={[styles.audioName, selectedEffect === effect.id && styles.selectedAudioName]}
-                          numberOfLines={2}
+                    {categoryEffects.map((effect) => {
+                      const isLoading = loadingPreviewId === effect.id;
+                      return (
+                        <Pressable
+                          key={effect.id}
+                          style={[styles.audioCard, selectedEffect === effect.id && styles.selectedAudioCard]}
+                          onPress={() => handleSelectEffect(effect.id)}
                         >
-                          {effect.name}
-                        </Text>
-
-                        {/* Play Button - Separate and Prominent */}
-                        {effect.previewUrl && (
-                          <Pressable
-                            style={[
-                              styles.audioPlayButton,
-                              playingPreviewId === effect.id && styles.playingButton,
-                              selectedEffect === effect.id && styles.selectedPlayButton,
-                            ]}
-                            onPress={(e) => {
-                              e.stopPropagation();
-                              handlePreviewAudio(effect.id, effect.previewUrl!);
-                            }}
+                          <Text
+                            style={[styles.audioName, selectedEffect === effect.id && styles.selectedAudioName]}
+                            numberOfLines={2}
                           >
-                            {playingPreviewId === effect.id ? (
-                              <Pause size={14} color={Colors.white} />
-                            ) : (
-                              <Play size={14} color={Colors.white} />
-                            )}
-                          </Pressable>
-                        )}
-
-                        {/* Selected Checkmark */}
-                        {selectedEffect === effect.id && (
-                          <View style={styles.selectedIndicator}>
-                            <Text style={styles.checkmarkText}>✓</Text>
-                          </View>
-                        )}
-
-                        {/* Playing Wave Animation */}
-                        {playingPreviewId === effect.id && (
-                          <View style={styles.playingWave}>
-                            <Animated.View
+                            {effect.name}
+                          </Text>
+                          {effect.previewUrl && (
+                            <Pressable
                               style={[
-                                styles.waveBar,
-                                {
-                                  height: waveAnimations.bar1.interpolate({
-                                    inputRange: [0, 1],
-                                    outputRange: [3, 12],
-                                  }),
-                                },
+                                styles.audioPlayButton,
+                                playingPreviewId === effect.id && styles.playingButton,
+                                selectedEffect === effect.id && styles.selectedPlayButton,
+                                isLoading && styles.loadingButton,
                               ]}
-                            />
-                            <Animated.View
-                              style={[
-                                styles.waveBar,
-                                {
-                                  height: waveAnimations.bar2.interpolate({
-                                    inputRange: [0, 1],
-                                    outputRange: [4, 14],
-                                  }),
-                                },
-                              ]}
-                            />
-                            <Animated.View
-                              style={[
-                                styles.waveBar,
-                                {
-                                  height: waveAnimations.bar3.interpolate({
-                                    inputRange: [0, 1],
-                                    outputRange: [2, 10],
-                                  }),
-                                },
-                              ]}
-                            />
-                            <Animated.View
-                              style={[
-                                styles.waveBar,
-                                {
-                                  height: waveAnimations.bar4.interpolate({
-                                    inputRange: [0, 1],
-                                    outputRange: [5, 13],
-                                  }),
-                                },
-                              ]}
-                            />
-                          </View>
-                        )}
-                      </Pressable>
-                    ))}
+                              onPress={(e) => {
+                                e.stopPropagation();
+                                handlePreviewAudio(effect.id, effect.previewUrl!);
+                              }}
+                              disabled={isLoading}
+                            >
+                              {isLoading ? (
+                                <ActivityIndicator size="small" color={Colors.white} />
+                              ) : playingPreviewId === effect.id ? (
+                                <Pause size={14} color={Colors.white} />
+                              ) : (
+                                <Play size={14} color={Colors.white} />
+                              )}
+                            </Pressable>
+                          )}
+                          {selectedEffect === effect.id && (
+                            <View style={styles.selectedIndicator}>
+                              <Text style={styles.checkmarkText}>✓</Text>
+                            </View>
+                          )}
+                          {playingPreviewId === effect.id && (
+                            <View style={styles.playingWave}>
+                              <Animated.View
+                                style={[
+                                  styles.waveBar,
+                                  {
+                                    height: waveAnimations.bar1.interpolate({
+                                      inputRange: [0, 1],
+                                      outputRange: [3, 12],
+                                    }),
+                                  },
+                                ]}
+                              />
+                              <Animated.View
+                                style={[
+                                  styles.waveBar,
+                                  {
+                                    height: waveAnimations.bar2.interpolate({
+                                      inputRange: [0, 1],
+                                      outputRange: [4, 14],
+                                    }),
+                                  },
+                                ]}
+                              />
+                              <Animated.View
+                                style={[
+                                  styles.waveBar,
+                                  {
+                                    height: waveAnimations.bar3.interpolate({
+                                      inputRange: [0, 1],
+                                      outputRange: [2, 10],
+                                    }),
+                                  },
+                                ]}
+                              />
+                              <Animated.View
+                                style={[
+                                  styles.waveBar,
+                                  {
+                                    height: waveAnimations.bar4.interpolate({
+                                      inputRange: [0, 1],
+                                      outputRange: [5, 13],
+                                    }),
+                                  },
+                                ]}
+                              />
+                            </View>
+                          )}
+                        </Pressable>
+                      );
+                    })}
                   </View>
                 </View>
               );
             })}
           </View>
-
-          {/* Step 2: Adjust Audio Levels */}
           <Card style={styles.volumeCard}>
             <View style={styles.stepHeader}>
               <View style={styles.stepNumber}>
@@ -492,9 +451,7 @@ export default function AudioScreen() {
                 <Text style={styles.stepDesc}>Balance your voice and background audio</Text>
               </View>
             </View>
-
             <View style={styles.volumeControls}>
-              {/* Voice Volume Slider */}
               <View style={styles.sliderCard}>
                 <View style={styles.sliderHeader}>
                   <View style={styles.sliderLabelWithIcon}>
@@ -519,8 +476,6 @@ export default function AudioScreen() {
                   <Text style={styles.sliderLabelText}>Loud</Text>
                 </View>
               </View>
-
-              {/* Background Volume Slider */}
               <View style={styles.sliderCard}>
                 <View style={styles.sliderHeader}>
                   <View style={styles.sliderLabelWithIcon}>
@@ -547,8 +502,6 @@ export default function AudioScreen() {
               </View>
             </View>
           </Card>
-
-          {/* Step 3: Preview Your Mix */}
           <Card style={styles.previewCard}>
             <View style={styles.stepHeader}>
               <View style={styles.stepNumber}>
@@ -563,26 +516,21 @@ export default function AudioScreen() {
                 </Text>
               </View>
             </View>
-
             <View style={styles.previewSection}>
               <View style={styles.previewWaveform}>
                 <View style={[styles.waveform, isPlaying && styles.activeWaveform]} />
               </View>
-
               <Pressable
                 style={[styles.previewButton, isPlaying && styles.previewButtonPlaying]}
                 onPress={handlePlayMixedPreview}
               >
                 {isPlaying ? <Pause size={24} color={Colors.white} /> : <Play size={24} color={Colors.white} />}
               </Pressable>
-
               <Text style={styles.previewText}>
                 {isPlaying ? 'Playing mixed audio...' : 'Tap to preview your audiobook'}
               </Text>
             </View>
           </Card>
-
-          {/* Audio Mixing Tips */}
           <Card style={styles.tipsCard}>
             <View style={styles.tipsHeader}>
               <Headphones size={18} color={Colors.gray[600]} />
@@ -595,7 +543,6 @@ export default function AudioScreen() {
             </View>
           </Card>
         </ScrollView>
-
         <View style={styles.footer}>
           <Button title="Back" onPress={handleBack} variant="ghost" style={styles.backFooterButton} />
           <Button
@@ -603,6 +550,8 @@ export default function AudioScreen() {
             onPress={handleNext}
             style={styles.nextButton}
             icon={<Sparkles size={18} color={Colors.white} />}
+            loading={isCompleting}
+            disabled={isCompleting}
           />
         </View>
       </View>
@@ -611,14 +560,8 @@ export default function AudioScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: Colors.softBackground,
-  },
-  container: {
-    flex: 1,
-    backgroundColor: Colors.softBackground,
-  },
+  safeArea: { flex: 1, backgroundColor: Colors.softBackground },
+  container: { flex: 1, backgroundColor: Colors.softBackground },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -637,30 +580,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerCenter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Layout.spacing.sm,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: Colors.primary,
-  },
-  headerRight: {
-    width: 40,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    padding: Layout.spacing.lg,
-    paddingBottom: Layout.spacing.xl,
-  },
-
-  stepCard: {
-    marginBottom: Layout.spacing.lg,
-  },
+  headerCenter: { flexDirection: 'row', alignItems: 'center', gap: Layout.spacing.sm },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: Colors.primary },
+  headerRight: { width: 40 },
+  scrollView: { flex: 1 },
+  content: { padding: Layout.spacing.lg, paddingBottom: Layout.spacing.xl },
+  stepCard: { marginBottom: Layout.spacing.lg },
   volumeCard: {
     marginBottom: Layout.spacing.lg,
     backgroundColor: Colors.white,
@@ -687,11 +612,7 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
   },
-  stepHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: Layout.spacing.lg,
-  },
+  stepHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: Layout.spacing.lg },
   stepNumber: {
     width: 32,
     height: 32,
@@ -701,25 +622,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: Layout.spacing.md,
   },
-  stepNumberText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.white,
-  },
-  stepInfo: {
-    flex: 1,
-  },
-  stepTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: Colors.gray[900],
-    marginBottom: 2,
-  },
-  stepDesc: {
-    fontSize: 14,
-    color: Colors.gray[600],
-  },
-  // None Option Card
+  stepNumberText: { fontSize: 16, fontWeight: '700', color: Colors.white },
+  stepInfo: { flex: 1 },
+  stepTitle: { fontSize: 18, fontWeight: '700', color: Colors.gray[900], marginBottom: 2 },
+  stepDesc: { fontSize: 14, color: Colors.gray[600] },
   noneOptionCard: {
     backgroundColor: Colors.white,
     borderRadius: 12,
@@ -731,26 +637,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  selectedNoneCard: {
-    borderColor: Colors.primary,
-    backgroundColor: Colors.primary + '08',
-  },
-  noneOptionContent: {
-    flex: 1,
-  },
-  noneOptionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.gray[900],
-    marginBottom: 2,
-  },
-  selectedNoneTitle: {
-    color: Colors.primary,
-  },
-  noneOptionDesc: {
-    fontSize: 14,
-    color: Colors.gray[600],
-  },
+  selectedNoneCard: { borderColor: Colors.primary, backgroundColor: Colors.primary + '08' },
+  noneOptionContent: { flex: 1 },
+  noneOptionTitle: { fontSize: 16, fontWeight: '700', color: Colors.gray[900], marginBottom: 2 },
+  selectedNoneTitle: { color: Colors.primary },
+  noneOptionDesc: { fontSize: 14, color: Colors.gray[600] },
   selectedCheckmark: {
     width: 24,
     height: 24,
@@ -759,27 +650,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  checkmarkText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: Colors.white,
-  },
-
-  // Category sections
-  categorySection: {
-    marginBottom: Layout.spacing.xl,
-  },
+  checkmarkText: { fontSize: 10, fontWeight: '700', color: Colors.white },
+  categorySection: { marginBottom: Layout.spacing.xl },
   categoryHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: Layout.spacing.xs,
   },
-  categoryTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.gray[900],
-  },
+  categoryTitle: { fontSize: 16, fontWeight: '700', color: Colors.gray[900] },
   categoryCount: {
     fontSize: 12,
     fontWeight: '600',
@@ -789,18 +668,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 10,
   },
-  categoryDesc: {
-    fontSize: 13,
-    color: Colors.gray[500],
-    marginBottom: Layout.spacing.md,
-  },
-
-  // Audio grid and cards
-  audioGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginHorizontal: -4,
-  },
+  categoryDesc: { fontSize: 13, color: Colors.gray[500], marginBottom: Layout.spacing.md },
+  audioGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -4 },
   audioCard: {
     width: '30%',
     backgroundColor: Colors.white,
@@ -815,11 +684,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     elevation: 2,
   },
-  selectedAudioCard: {
-    borderColor: Colors.primary,
-    backgroundColor: Colors.selected,
-    transform: [{ scale: 1.02 }],
-  },
+  selectedAudioCard: { borderColor: Colors.primary, backgroundColor: Colors.selected, transform: [{ scale: 1.02 }] },
   audioName: {
     fontSize: 12,
     fontWeight: '600',
@@ -828,10 +693,7 @@ const styles = StyleSheet.create({
     lineHeight: 15,
     marginBottom: Layout.spacing.sm,
   },
-  selectedAudioName: {
-    color: Colors.primary,
-    fontWeight: '700',
-  },
+  selectedAudioName: { color: Colors.primary, fontWeight: '700' },
   audioPlayButton: {
     width: 28,
     height: 28,
@@ -845,13 +707,9 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  playingButton: {
-    backgroundColor: Colors.success,
-    transform: [{ scale: 1.1 }],
-  },
-  selectedPlayButton: {
-    backgroundColor: Colors.primary,
-  },
+  playingButton: { backgroundColor: Colors.success, transform: [{ scale: 1.1 }] },
+  loadingButton: { backgroundColor: Colors.gray[500] },
+  selectedPlayButton: { backgroundColor: Colors.primary },
   selectedIndicator: {
     position: 'absolute',
     top: 6,
@@ -876,57 +734,22 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: 1.5,
   },
-  waveBar: {
-    width: 2.5,
-    backgroundColor: Colors.success,
-    borderRadius: 1.5,
-    opacity: 0.9,
-  },
-  volumeControls: {
-    gap: Layout.spacing.lg,
-  },
-  sliderCard: {
-    marginBottom: Layout.spacing.lg,
-  },
+  waveBar: { width: 2.5, backgroundColor: Colors.success, borderRadius: 1.5, opacity: 0.9 },
+  volumeControls: { gap: Layout.spacing.lg },
+  sliderCard: { marginBottom: Layout.spacing.lg },
   sliderHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: Layout.spacing.sm,
   },
-  sliderLabelWithIcon: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Layout.spacing.sm,
-  },
-  sliderLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.gray[900],
-  },
-  sliderValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.primary,
-  },
-  slider: {
-    width: '100%',
-    height: 40,
-    marginBottom: Layout.spacing.xs,
-  },
-  sliderLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  sliderLabelText: {
-    fontSize: 12,
-    color: Colors.gray[500],
-    fontWeight: '500',
-  },
-  previewSection: {
-    alignItems: 'center',
-    gap: Layout.spacing.lg,
-  },
+  sliderLabelWithIcon: { flexDirection: 'row', alignItems: 'center', gap: Layout.spacing.sm },
+  sliderLabel: { fontSize: 16, fontWeight: '600', color: Colors.gray[900] },
+  sliderValue: { fontSize: 16, fontWeight: '700', color: Colors.primary },
+  slider: { width: '100%', height: 40, marginBottom: Layout.spacing.xs },
+  sliderLabels: { flexDirection: 'row', justifyContent: 'space-between' },
+  sliderLabelText: { fontSize: 12, color: Colors.gray[500], fontWeight: '500' },
+  previewSection: { alignItems: 'center', gap: Layout.spacing.lg },
   previewButton: {
     width: 64,
     height: 64,
@@ -940,33 +763,12 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 6,
   },
-  previewButtonPlaying: {
-    backgroundColor: Colors.cyberGreen,
-    shadowColor: Colors.cyberGreen,
-  },
-  previewText: {
-    fontSize: 14,
-    color: Colors.gray[600],
-    textAlign: 'center',
-  },
-  tipsCard: {
-    backgroundColor: Colors.gray[50],
-    borderColor: Colors.gray[200],
-  },
-  tipsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Layout.spacing.sm,
-    marginBottom: Layout.spacing.md,
-  },
-  tipsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.gray[700],
-  },
-  tipsContent: {
-    gap: Layout.spacing.xs,
-  },
+  previewButtonPlaying: { backgroundColor: Colors.cyberGreen, shadowColor: Colors.cyberGreen },
+  previewText: { fontSize: 14, color: Colors.gray[600], textAlign: 'center' },
+  tipsCard: { backgroundColor: Colors.gray[50], borderColor: Colors.gray[200] },
+  tipsHeader: { flexDirection: 'row', alignItems: 'center', gap: Layout.spacing.sm, marginBottom: Layout.spacing.md },
+  tipsTitle: { fontSize: 16, fontWeight: '600', color: Colors.gray[700] },
+  tipsContent: { gap: Layout.spacing.xs },
   previewWaveform: {
     width: '100%',
     height: 40,
@@ -975,14 +777,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 8,
   },
-  waveform: {
-    height: 24,
-    backgroundColor: Colors.gray[300],
-    borderRadius: 4,
-  },
-  activeWaveform: {
-    backgroundColor: Colors.primary,
-  },
+  waveform: { height: 24, backgroundColor: Colors.gray[300], borderRadius: 4 },
+  activeWaveform: { backgroundColor: Colors.primary },
   volumeTrack: {
     flex: 1,
     height: 8,
@@ -1000,11 +796,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.02)',
     borderRadius: 8,
   },
-  volumeFill: {
-    height: '100%',
-    backgroundColor: Colors.primary,
-    borderRadius: 4,
-  },
+  volumeFill: { height: '100%', backgroundColor: Colors.primary, borderRadius: 4 },
   volumeThumb: {
     width: 16,
     height: 16,
@@ -1020,17 +812,34 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  volumeValue: {
-    fontSize: 14,
+  volumeValue: { fontSize: 14, fontWeight: '600', color: Colors.primary, width: 40, textAlign: 'right' },
+  tipText: { fontSize: 14, color: Colors.gray[600], marginBottom: 4 },
+  modalBackground: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(15, 15, 35, 0.8)',
+  },
+  modalContent: {
+    backgroundColor: Colors.white,
+    padding: Layout.spacing.lg,
+    borderRadius: Layout.borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 5,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    width: '80%',
+    minHeight: 150,
+  },
+  modalText: {
+    marginTop: Layout.spacing.md,
+    fontSize: 18,
     fontWeight: '600',
     color: Colors.primary,
-    width: 40,
-    textAlign: 'right',
-  },
-  tipText: {
-    fontSize: 14,
-    color: Colors.gray[600],
-    marginBottom: 4,
+    textAlign: 'center',
   },
   footer: {
     flexDirection: 'row',
@@ -1040,15 +849,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Colors.gray[200],
   },
-  backFooterButton: {
-    flex: 1,
-    borderRadius: 12,
-    minHeight: 50,
-  },
-  nextButton: {
-    flex: 2,
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
-    minHeight: 50,
-  },
+  backFooterButton: { flex: 1, borderRadius: 12, minHeight: 50 },
+  nextButton: { flex: 2, backgroundColor: Colors.primary, borderRadius: 12, minHeight: 50 },
 });
