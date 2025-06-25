@@ -1,10 +1,4 @@
-import React, {
-  useState,
-  useEffect,
-  useRef,
-  useMemo,
-  useCallback,
-} from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -48,11 +42,7 @@ import { useProfile } from '../../hooks/useProfile';
 import { signOut as supabaseSignOut } from '../../lib/auth';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import {
-  BottomSheetModal,
-  BottomSheetView,
-  BottomSheetBackdrop,
-} from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 
 const { width } = Dimensions.get('window');
 
@@ -75,12 +65,7 @@ const EnhancedColors = {
 };
 
 function ProfileScreenContent() {
-  const {
-    profile,
-    isLoading: profileLoading,
-    error: profileError,
-    updateProfile,
-  } = useProfile();
+  const { profile, isLoading: profileLoading, error: profileError, updateProfile } = useProfile();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -89,6 +74,10 @@ function ProfileScreenContent() {
   const [isEditingName, setIsEditingName] = useState(false);
   const [name, setName] = useState(profile?.name || '');
   const [isUpdating, setIsUpdating] = useState(false);
+
+  const handleComingSoon = () => {
+    Alert.alert('Coming Soon!', 'This feature is under development and will be available in a future update.');
+  };
 
   // Bottom sheet state
   const bottomSheetModalRef = useRef<BottomSheetModal>(null);
@@ -104,13 +93,7 @@ function ProfileScreenContent() {
 
   const renderBackdrop = useCallback(
     (props: any) => (
-      <BottomSheetBackdrop
-        {...props}
-        disappearsOnIndex={-1}
-        appearsOnIndex={0}
-        pressBehavior="close"
-        opacity={0.5}
-      />
+      <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} pressBehavior="close" opacity={0.5} />
     ),
     []
   );
@@ -162,10 +145,7 @@ function ProfileScreenContent() {
     handleCloseModalPress();
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert(
-        'Permission Denied',
-        'Sorry, we need camera roll permissions to make this work!'
-      );
+      Alert.alert('Permission Denied', 'Sorry, we need camera roll permissions to make this work!');
       return;
     }
 
@@ -223,28 +203,28 @@ function ProfileScreenContent() {
       icon: <Settings size={22} color={EnhancedColors.accent} />,
       title: 'Account Settings',
       subtitle: 'Privacy, security & preferences',
-      onPress: () => {},
+      onPress: handleComingSoon,
       color: EnhancedColors.accent,
     },
     {
       icon: <CreditCard size={22} color={EnhancedColors.success} />,
       title: 'Subscription',
       subtitle: 'Manage your plan & billing',
-      onPress: () => {},
+      onPress: handleComingSoon,
       color: EnhancedColors.success,
     },
     {
       icon: <Share2 size={22} color={EnhancedColors.info} />,
       title: 'Share & Earn',
       subtitle: 'Invite friends and get rewards',
-      onPress: () => {},
+      onPress: handleComingSoon,
       color: EnhancedColors.info,
     },
     {
       icon: <Shield size={22} color={EnhancedColors.warning} />,
       title: 'Privacy & Security',
       subtitle: 'Control your data & safety',
-      onPress: () => {},
+      onPress: handleComingSoon,
       color: EnhancedColors.warning,
     },
   ];
@@ -252,27 +232,31 @@ function ProfileScreenContent() {
   const achievements = [
     {
       icon: <BookOpen size={18} color={Colors.white} />,
-      value: profile?.created_books || 0,
+      value: 0,
       label: 'Books Created',
       color: EnhancedColors.success,
+      isMock: true,
     },
     {
       icon: <Clock size={18} color={Colors.white} />,
       value: '12h',
       label: 'Reading Time',
       color: EnhancedColors.info,
+      isMock: true,
     },
     {
       icon: <Trophy size={18} color={Colors.white} />,
       value: 5,
       label: 'Achievements',
       color: EnhancedColors.warning,
+      isMock: true,
     },
     {
       icon: <Target size={18} color={Colors.white} />,
       value: '7',
       label: 'Streak Days',
       color: EnhancedColors.accent,
+      isMock: true,
     },
   ];
 
@@ -299,10 +283,7 @@ function ProfileScreenContent() {
           <View style={styles.profileHeaderContent}>
             {/* Enhanced Avatar Section */}
             <View style={styles.avatarSection}>
-              <Pressable
-                style={styles.avatarContainer}
-                onPress={handlePresentModalPress}
-              >
+              <Pressable style={styles.avatarContainer} onPress={handlePresentModalPress}>
                 {isUpdating && (
                   <View style={styles.avatarOverlay}>
                     <ActivityIndicator size="large" color={Colors.white} />
@@ -341,11 +322,7 @@ function ProfileScreenContent() {
                     placeholder="Enter your name"
                     placeholderTextColor={EnhancedColors.glass}
                   />
-                  <Pressable
-                    style={styles.saveButton}
-                    onPress={handleNameUpdate}
-                    disabled={isUpdating}
-                  >
+                  <Pressable style={styles.saveButton} onPress={handleNameUpdate} disabled={isUpdating}>
                     {isUpdating ? (
                       <ActivityIndicator size="small" color={Colors.white} />
                     ) : (
@@ -354,10 +331,7 @@ function ProfileScreenContent() {
                   </Pressable>
                 </View>
               ) : (
-                <Pressable
-                  onPress={() => setIsEditingName(true)}
-                  style={styles.nameContainer}
-                >
+                <Pressable onPress={() => setIsEditingName(true)} style={styles.nameContainer}>
                   <Text style={styles.profileName} numberOfLines={1}>
                     {profile?.name || 'Anonymous User'}
                   </Text>
@@ -369,9 +343,7 @@ function ProfileScreenContent() {
               {/* Join Date */}
               <View style={styles.joinDateContainer}>
                 <Calendar size={14} color={Colors.gray[300]} />
-                <Text style={styles.joinDate}>
-                  Member since {new Date().getFullYear()}
-                </Text>
+                <Text style={styles.joinDate}>Member since {new Date().getFullYear()}</Text>
               </View>
             </View>
           </View>
@@ -379,18 +351,35 @@ function ProfileScreenContent() {
           {/* Enhanced Stats Cards */}
           <View style={styles.statsContainer}>
             {achievements.map((stat, index) => (
-              <View
+              <Pressable
                 key={index}
-                style={[styles.statCard, { backgroundColor: stat.color }]}
+                style={styles.statCardWrapper}
+                onPress={stat.isMock ? handleComingSoon : undefined}
               >
-                <View style={styles.statIconContainer}>
-                  <BookOpen size={14} color={Colors.white} />
+                <View style={[styles.statCard, { backgroundColor: stat.color }, stat.isMock && { opacity: 0.7 }]}>
+                  {stat.isMock && (
+                    <View
+                      style={{
+                        position: 'absolute',
+                        top: 4,
+                        right: 4,
+                        backgroundColor: 'rgba(0,0,0,0.25)',
+                        paddingHorizontal: 6,
+                        paddingVertical: 2,
+                        borderRadius: 6,
+                        zIndex: 1,
+                      }}
+                    >
+                      <Text style={{ color: 'white', fontSize: 8, fontWeight: 'bold', letterSpacing: 0.5 }}>SOON</Text>
+                    </View>
+                  )}
+                  <View style={styles.statIconContainer}>{stat.icon}</View>
+                  <Text style={styles.statValue}>{stat.value}</Text>
+                  <Text style={styles.statLabel} numberOfLines={1}>
+                    {stat.label}
+                  </Text>
                 </View>
-                <Text style={styles.statValue}>{stat.value}</Text>
-                <Text style={styles.statLabel} numberOfLines={1}>
-                  {stat.label}
-                </Text>
-              </View>
+              </Pressable>
             ))}
           </View>
         </View>
@@ -398,7 +387,7 @@ function ProfileScreenContent() {
         <View style={styles.mainContent}>
           {/* Enhanced Premium Banner */}
           {!profile?.is_premium && (
-            <Pressable style={styles.premiumBanner}>
+            <Pressable style={styles.premiumBanner} onPress={handleComingSoon}>
               <View style={styles.premiumGradient} />
               <View style={styles.premiumContent}>
                 <View style={styles.premiumIcon}>
@@ -406,9 +395,7 @@ function ProfileScreenContent() {
                 </View>
                 <View style={styles.premiumTextContainer}>
                   <Text style={styles.premiumTitle}>Upgrade to Premium</Text>
-                  <Text style={styles.premiumDesc}>
-                    Unlock unlimited books, advanced voices & more
-                  </Text>
+                  <Text style={styles.premiumDesc}>Unlock unlimited books, advanced voices & more</Text>
                 </View>
                 <ChevronRight size={24} color={Colors.white} />
               </View>
@@ -426,14 +413,7 @@ function ProfileScreenContent() {
                 ]}
                 onPress={item.onPress}
               >
-                <View
-                  style={[
-                    styles.menuIconContainer,
-                    { backgroundColor: `${item.color}15` },
-                  ]}
-                >
-                  {item.icon}
-                </View>
+                <View style={[styles.menuIconContainer, { backgroundColor: `${item.color}15` }]}>{item.icon}</View>
                 <View style={styles.menuTextContainer}>
                   <Text style={styles.menuItemText}>{item.title}</Text>
                   <Text style={styles.menuItemSubtitle}>{item.subtitle}</Text>
@@ -444,29 +424,21 @@ function ProfileScreenContent() {
           </View>
 
           {/* Enhanced Sign Out Button */}
-          <Pressable
-            style={styles.signOutButton}
-            onPress={handleSignOut}
-            disabled={isSigningOut}
-          >
+          <Pressable style={styles.signOutButton} onPress={handleSignOut} disabled={isSigningOut}>
             <View style={styles.signOutContent}>
               {isSigningOut ? (
                 <ActivityIndicator size="small" color={Colors.error} />
               ) : (
                 <LogOut size={20} color={Colors.error} />
               )}
-              <Text style={styles.signOutButtonText}>
-                {isSigningOut ? 'Signing out...' : 'Sign Out'}
-              </Text>
+              <Text style={styles.signOutButtonText}>{isSigningOut ? 'Signing out...' : 'Sign Out'}</Text>
             </View>
           </Pressable>
 
           {/* App Info */}
           <View style={styles.appInfo}>
             <Text style={styles.appVersion}>Yabble v1.0.0</Text>
-            <Text style={styles.appCopyright}>
-              © 2024 Yabble. All rights reserved.
-            </Text>
+            <Text style={styles.appCopyright}>© 2024 Yabble. All rights reserved.</Text>
           </View>
         </View>
       </ScrollView>
@@ -481,34 +453,18 @@ function ProfileScreenContent() {
         <BottomSheetView style={styles.bottomSheetContent}>
           <Text style={styles.modalTitle}>Change Profile Photo</Text>
           <Pressable
-            style={({ pressed }) => [
-              styles.modalButton,
-              pressed && styles.modalButtonPressed,
-            ]}
+            style={({ pressed }) => [styles.modalButton, pressed && styles.modalButtonPressed]}
             onPress={handleAvatarChange}
           >
-            <ImageIcon
-              size={22}
-              color={EnhancedColors.accent}
-              style={styles.modalButtonIcon}
-            />
+            <ImageIcon size={22} color={EnhancedColors.accent} style={styles.modalButtonIcon} />
             <Text style={styles.modalButtonText}>Choose from Gallery</Text>
           </Pressable>
           <Pressable
-            style={({ pressed }) => [
-              styles.modalButton,
-              pressed && styles.modalButtonPressed,
-            ]}
+            style={({ pressed }) => [styles.modalButton, pressed && styles.modalButtonPressed]}
             onPress={handleAvatarRemove}
           >
-            <Trash2
-              size={22}
-              color={Colors.error}
-              style={styles.modalButtonIcon}
-            />
-            <Text style={[styles.modalButtonText, { color: Colors.error }]}>
-              Remove Photo
-            </Text>
+            <Trash2 size={22} color={Colors.error} style={styles.modalButtonIcon} />
+            <Text style={[styles.modalButtonText, { color: Colors.error }]}>Remove Photo</Text>
           </Pressable>
         </BottomSheetView>
       </BottomSheetModal>
@@ -660,11 +616,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: Layout.spacing.sm,
   },
+  statCardWrapper: {
+    flex: 1,
+    marginHorizontal: 3,
+  },
   statCard: {
     flex: 1,
     alignItems: 'center',
     padding: Layout.spacing.sm,
-    marginHorizontal: 3,
     borderRadius: Layout.borderRadius.md,
     shadowColor: Colors.black,
     shadowOffset: { width: 0, height: 2 },
@@ -686,6 +645,22 @@ const styles = StyleSheet.create({
     color: Colors.white,
     textAlign: 'center',
     opacity: 0.9,
+  },
+  comingSoonBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: Layout.borderRadius.sm,
+    zIndex: 1,
+  },
+  comingSoonText: {
+    color: Colors.white,
+    fontSize: 8,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
   },
   premiumBanner: {
     borderRadius: Layout.borderRadius.lg,
