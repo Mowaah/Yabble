@@ -1,33 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getUserProfile, updateUserProfile } from '../lib/database';
-import { supabase } from '../lib/supabase';
-import type { Tables } from '../lib/database';
+import { uploadFile } from '../lib/storage';
+import { Profile } from '../types';
 
-type ProfileUpdate = Tables['profiles']['Update'] & {
-  avatarFile?: { uri: string; name: string };
-};
-
-const getContentType = (name: string) => {
-  const extension = name.split('.').pop()?.toLowerCase();
-  switch (extension) {
-    case 'jpg':
-    case 'jpeg':
-      return 'image/jpeg';
-    case 'png':
-      return 'image/png';
-    case 'gif':
-      return 'image/gif';
-    case 'heic':
-      return 'image/heic';
-    default:
-      return 'image/jpeg'; // Default to JPEG
-  }
+type ProfileUpdate = Partial<Profile> & {
+  avatarFile?: { uri: string };
 };
 
 export function useProfile() {
   const { session } = useAuth();
-  const [profile, setProfile] = useState<Tables['profiles']['Row'] | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,9 +18,11 @@ export function useProfile() {
     async function loadProfile() {
       if (!session?.user.id) return;
 
+      setIsLoading(true);
+      setError(null);
       try {
-        const { data, error } = await getUserProfile(session.user.id);
-        if (error) throw error;
+        const { data, error: fetchError } = await getUserProfile(session.user.id);
+        if (fetchError) throw fetchError;
         setProfile(data);
       } catch (e: any) {
         setError(e.message);
@@ -51,45 +36,35 @@ export function useProfile() {
 
   const updateProfile = async (updates: ProfileUpdate) => {
     if (!session?.user.id) throw new Error('User not authenticated');
+    if (!profile) throw new Error('Profile not loaded yet');
+
+    setIsLoading(true);
+    setError(null);
 
     try {
       let avatarUrl = updates.avatar_url;
 
-      if (updates.avatarFile) {
-        const { uri, name } = updates.avatarFile;
-        const arraybuffer = await fetch(uri).then((res) => res.arrayBuffer());
-        const contentType = getContentType(name);
-
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('avatars')
-          .upload(`${session.user.id}/${name}`, arraybuffer, {
-            contentType,
-            upsert: true,
-          });
-
-        if (uploadError) {
-          throw uploadError;
-        }
-
-        const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(uploadData.path);
-        avatarUrl = publicUrlData.publicUrl;
+      if (updates.avatarFile?.uri) {
+        avatarUrl = await uploadFile('avatars', updates.avatarFile.uri, session.user.id);
       }
 
-      const profileUpdates = {
+      const profileUpdates: Partial<Profile> = {
         ...updates,
         avatar_url: avatarUrl,
         id: session.user.id,
       };
-      delete profileUpdates.avatarFile;
+      delete (profileUpdates as any).avatarFile;
 
-      const { data, error } = await updateUserProfile(session.user.id, profileUpdates);
+      const { data, error: updateError } = await updateUserProfile(session.user.id, profileUpdates);
 
-      if (error) throw error;
+      if (updateError) throw updateError;
       setProfile(data);
       return data;
     } catch (e: any) {
       setError(e.message);
       throw e;
+    } finally {
+      setIsLoading(false);
     }
   };
 

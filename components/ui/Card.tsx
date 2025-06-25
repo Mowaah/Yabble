@@ -1,29 +1,17 @@
 import React from 'react';
-import { 
-  StyleSheet, 
-  View, 
-  ViewStyle,
-  Pressable,
-  Platform,
-} from 'react-native';
+import { StyleSheet, View, ViewStyle, Pressable, Platform, StyleProp } from 'react-native';
 import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
 
 interface CardProps {
   children: React.ReactNode;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   onPress?: () => void;
   elevation?: 'none' | 'low' | 'medium' | 'high';
   padding?: 'none' | 'small' | 'medium' | 'large';
 }
 
-export default function Card({
-  children,
-  style,
-  onPress,
-  elevation = 'low',
-  padding = 'medium',
-}: CardProps) {
+export default function Card({ children, style, onPress, elevation = 'low', padding = 'medium' }: CardProps) {
   const getElevationStyle = (): ViewStyle => {
     if (Platform.OS === 'web') {
       switch (elevation) {
@@ -87,22 +75,11 @@ export default function Card({
     }
   };
 
-  const cardStyle = StyleSheet.flatten([
-    styles.card,
-    getElevationStyle(),
-    getPaddingStyle(),
-    style,
-  ]);
+  const cardStyle = StyleSheet.flatten([styles.card, getElevationStyle(), getPaddingStyle(), style]);
 
   if (onPress) {
     return (
-      <Pressable 
-        style={({ pressed }) => [
-          cardStyle,
-          pressed && styles.pressed,
-        ]}
-        onPress={onPress}
-      >
+      <Pressable style={({ pressed }) => [cardStyle, pressed && styles.pressed]} onPress={onPress}>
         {children}
       </Pressable>
     );

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { StyleSheet, Text, View, FlatList, Pressable, ActivityIndicator, Platform, Modal, Alert } from 'react-native';
 import { Search, Headphones, CheckCircle2, XCircle, Trash2, X, MoreHorizontal } from 'lucide-react-native';
 import Colors from '../../constants/Colors';
@@ -7,21 +7,26 @@ import AudiobookCard from '../../components/audiobook/AudiobookCard';
 import Input from '../../components/ui/Input';
 import { useAudiobooks } from '../../hooks/useAudiobooks';
 // import type { Tables } from '../../lib/database'; // Temporarily disabled due to TypeScript issues
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { prepareAudioFile, FilePreparationError } from '../../utils/fileUtils';
 import { saveAudioToDevice, shareAudioFile, MediaError } from '../../utils/mediaUtils';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { audioEffects } from '../../lib/audio';
-import { updateAudiobook, bulkDeleteAudiobooks } from '../../lib/database';
+import { updateAudiobook, bulkDeleteAudiobooks, publishAudiobook, toggleBookmark } from '../../lib/database';
 import { shouldAutoFixStatus } from '../../utils/progressUtils';
 import { AUDIO_CONSTANTS } from '../../constants/AudioConstants';
+import { useAuth } from '../../contexts/AuthContext';
+import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 
 type FilterStatus = 'completed' | 'draft' | 'saved';
 type ModalStatus = 'idle' | 'loading' | 'success' | 'error';
 
 export default function LibraryScreen() {
+  const { session } = useAuth();
   const { audiobooks, isLoading, error, refreshAudiobooks } = useAudiobooks();
   const navigation = useNavigation();
+  const user = session?.user;
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('completed');
   const [favorites, setFavorites] = useState<string[]>([]);
@@ -37,71 +42,70 @@ export default function LibraryScreen() {
   const [selectedBooks, setSelectedBooks] = useState<string[]>([]);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
-  // Fix drafts that should actually be completed - optimized logic
-  const fixIncompleteStatuses = useCallback(async () => {
-    if (!audiobooks) return;
+  const router = useRouter();
 
-    // Use utility function to determine which drafts should be auto-fixed
-    const draftsToFix = audiobooks.filter(shouldAutoFixStatus);
-
-    // Update any drafts that are clearly complete
-    for (const book of draftsToFix) {
-      try {
-        await updateAudiobook(book.id, { status: 'completed' });
-      } catch (error) {
-        console.error(`Failed to fix status for "${book.title}":`, error);
-      }
-    }
-
-    // Refresh audiobooks if we fixed any
-    if (draftsToFix.length > 0) {
-      await refreshAudiobooks();
-    }
-  }, [audiobooks, refreshAudiobooks]);
-
+  // This effect is for fetching data on screen focus/re-focus.
   useFocusEffect(
     useCallback(() => {
-      // Debounce refresh to prevent spam
-      const refreshTimeout = setTimeout(() => {
-        refreshAudiobooks();
-      }, AUDIO_CONSTANTS.REFRESH_DEBOUNCE);
-
-      // Auto-fix with corrected logic - only runs when backgroundEffect property exists
-      const autoFixTimeout = setTimeout(() => {
-        fixIncompleteStatuses();
-      }, AUDIO_CONSTANTS.AUTO_FIX_DELAY);
-
+      if (session?.user?.id) {
+        refreshAudiobooks(session.user.id);
+      }
+      // Cleanup audio on blur
       const unsubscribe = navigation.addListener('blur', () => {
-        // Stop all audio when leaving the library
         audioEffects.stopAllAudio().catch(console.error);
       });
 
-      return () => {
-        clearTimeout(refreshTimeout);
-        clearTimeout(autoFixTimeout);
-        unsubscribe();
-      };
-    }, [navigation, refreshAudiobooks, fixIncompleteStatuses])
+      return unsubscribe;
+    }, [session?.user?.id, navigation, refreshAudiobooks]) // Stable dependencies
   );
+
+  // This separate effect handles status fixing only when the audiobook data changes.
+  useEffect(() => {
+    const fixStatuses = async () => {
+      if (!audiobooks || audiobooks.length === 0) return;
+
+      const draftsToFix = audiobooks.filter(shouldAutoFixStatus);
+
+      if (draftsToFix.length > 0) {
+        for (const book of draftsToFix) {
+          try {
+            await updateAudiobook(book.id, { status: 'completed' });
+          } catch (error) {
+            console.error(`Failed to fix status for "${book.title}":`, error);
+          }
+        }
+        // After fixing, perform one final refresh to get the updated state.
+        if (session?.user?.id) {
+          refreshAudiobooks(session.user.id);
+        }
+      }
+    };
+
+    fixStatuses();
+  }, [audiobooks]); // This effect is now correctly decoupled.
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await refreshAudiobooks();
+    await refreshAudiobooks(session?.user?.id);
     setIsRefreshing(false);
   };
 
   const getFilterCount = (status: FilterStatus) => {
     if (!audiobooks) return 0;
     if (status === 'saved') {
-      return audiobooks.filter((book) => book.bookmarked).length;
+      return audiobooks.filter((book) => book.is_bookmarked).length;
     }
     return audiobooks.filter((book) => book.status === status).length;
   };
 
   const toggleFavorite = (bookId: string) => {
-    setFavorites(
-      (prev) => (prev.includes(bookId) ? prev.filter((id) => id !== bookId) : [bookId, ...prev]) // Add to beginning to show at top
-    );
+    setFavorites((prev) => (prev.includes(bookId) ? prev.filter((id) => id !== bookId) : [bookId, ...prev]));
+  };
+
+  const handleToggleBookmark = async (audiobookId: string, isBookmarked: boolean) => {
+    if (!user) return; // Or prompt to login
+    await toggleBookmark(audiobookId, user.id, isBookmarked);
+    await refreshAudiobooks(user.id);
   };
 
   // Bulk selection functions
@@ -149,7 +153,7 @@ export default function LibraryScreen() {
       try {
         setIsBulkDeleting(true);
         await bulkDeleteAudiobooks(selectedBooks);
-        await refreshAudiobooks();
+        await refreshAudiobooks(session?.user?.id);
         setSelectedBooks([]);
         setIsSelectionMode(false);
       } catch (error) {
@@ -172,21 +176,23 @@ export default function LibraryScreen() {
       const matchesSearch = book.title.toLowerCase().includes(searchQuery.toLowerCase());
 
       if (filterStatus === 'saved') {
-        return matchesSearch && book.bookmarked;
+        return matchesSearch && book.is_bookmarked;
       }
 
       const matchesFilter = book.status === filterStatus;
       return matchesSearch && matchesFilter;
     });
 
-    // Sort favorites to top
+    // Sort bookmarked to top
     return filteredBooks.sort((a, b) => {
       const aIsFav = favorites.includes(a.id);
       const bIsFav = favorites.includes(b.id);
 
       if (aIsFav && !bIsFav) return -1;
       if (!aIsFav && bIsFav) return 1;
-      return 0;
+
+      // if both are favorited or not, sort by date
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
   };
 
@@ -253,6 +259,22 @@ export default function LibraryScreen() {
         </Text>
       </View>
     );
+  };
+
+  const handlePublishToHub = async (bookId: string) => {
+    setShowModal(true);
+    setModalStatus('loading');
+    setModalMessage('Publishing your audiobook to the Hub...');
+
+    try {
+      await publishAudiobook(bookId);
+      await refreshAudiobooks(session?.user?.id);
+      setModalStatus('success');
+      setModalMessage('Your audiobook is now live on the Hub!');
+    } catch (error: any) {
+      setModalStatus('error');
+      setModalMessage(error.message || 'Failed to publish audiobook.');
+    }
   };
 
   const handleShare = async (audiobook: any) => {
@@ -360,14 +382,16 @@ export default function LibraryScreen() {
   const renderAudiobookItem = ({ item }: { item: any }) => (
     <AudiobookCard
       book={item}
+      context="library"
       isFavorite={favorites.includes(item.id)}
       onToggleFavorite={() => toggleFavorite(item.id)}
+      isBookmarked={item.is_bookmarked}
+      onToggleBookmark={() => handleToggleBookmark(item.id, !!item.is_bookmarked)}
       onShare={() => handleShare(item)}
       onDownload={() => handleDownload(item)}
-      onDelete={refreshAudiobooks}
-      onPublishToHub={() => {
-        // Placeholder for publish to hub functionality
-      }}
+      onDelete={() => refreshAudiobooks(session?.user?.id)}
+      onPublishToHub={() => handlePublishToHub(item.id)}
+      onEdit={() => router.push(`/library/edit/${item.id}`)}
       isSelectionMode={isSelectionMode}
       isSelected={selectedBooks.includes(item.id)}
       onSelect={toggleBookSelection}

@@ -11,6 +11,10 @@ export interface Audiobook {
   voiceId?: string;
   textContent: string;
   audioUrl?: string;
+  is_published?: boolean;
+  published_at?: string;
+  bookmarks_count?: number;
+  is_bookmarked?: boolean;
 }
 
 export interface Voice {
@@ -35,4 +39,25 @@ export interface User {
   avatar?: string;
   isPremium: boolean;
   createdBooks: number;
+}
+
+export interface Profile {
+  id: string;
+  name: string;
+  email?: string;
+  avatar_url?: string | null;
+  is_premium?: boolean;
+  created_books?: number;
+}
+
+export interface HubAudiobook {
+  id: string;
+  title: string;
+  cover_image?: string;
+  duration: number;
+  status: string;
+  voice_id?: string;
+  bookmarks_count?: number;
+  author: Profile;
+  is_bookmarked: boolean;
 }

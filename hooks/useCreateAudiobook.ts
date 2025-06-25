@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { createAudiobook } from '../lib/database';
-import type { Tables } from '../lib/database';
+import { uploadFile } from '../lib/storage';
 
 export function useCreateAudiobook() {
   const { session } = useAuth();
@@ -12,6 +12,7 @@ export function useCreateAudiobook() {
     title: string;
     textContent: string;
     voiceId?: string;
+    coverImageUri?: string | null;
   }) => {
     if (!session?.user.id) {
       throw new Error('User not authenticated');
@@ -21,6 +22,11 @@ export function useCreateAudiobook() {
     setError(null);
 
     try {
+      let coverImageUrl: string | null = null;
+      if (params.coverImageUri) {
+        coverImageUrl = await uploadFile('cover-images', params.coverImageUri, session.user.id);
+      }
+
       // Create the audiobook record with proper initial status
       const { data: audiobook, error: createError } = await createAudiobook({
         user_id: session.user.id,
@@ -30,7 +36,7 @@ export function useCreateAudiobook() {
         status: 'draft',
         duration: 0,
         audio_url: null,
-        cover_image: null,
+        cover_image: coverImageUrl,
       });
 
       if (createError) throw createError;

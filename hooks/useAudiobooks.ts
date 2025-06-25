@@ -1,45 +1,39 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '../contexts/AuthContext';
+import { useState, useCallback } from 'react';
 import { getAudiobooksForLibrary } from '../lib/database';
 
 export function useAudiobooks() {
-  const { session } = useAuth();
   const [audiobooks, setAudiobooks] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refreshAudiobooks = useCallback(
-    async (options?: { isInitialLoad?: boolean }) => {
-      if (!session?.user.id) {
-        if (options?.isInitialLoad) setIsLoading(false);
-        return;
-      }
+  const refreshAudiobooks = useCallback(async (userId?: string | null) => {
+    if (!userId) {
+      // Don't fetch if no user ID is provided.
+      setAudiobooks([]);
+      setIsLoading(false);
+      return;
+    }
 
-      if (options?.isInitialLoad) {
-        setIsLoading(true);
+    setIsLoading(true);
+    setError(null);
+    try {
+      const { data, error: dbError } = await getAudiobooksForLibrary(userId);
+      if (dbError) {
+        throw dbError;
       }
+      // Always set the audiobooks, even if it's an empty array
+      setAudiobooks(data || []);
+    } catch (e: any) {
+      setError(e.message);
+      console.error('Error fetching audiobooks for library:', e);
+    } finally {
+      // Ensure loading is always turned off after an attempt
+      setIsLoading(false);
+    }
+  }, []); // No dependencies, it's a pure function now
 
-      try {
-        const { data, error } = await getAudiobooksForLibrary(session.user.id);
-        if (error) {
-          throw error;
-        }
-        setAudiobooks(data || []);
-        setError(null);
-      } catch (e: any) {
-        setError(e.message);
-      } finally {
-        if (options?.isInitialLoad) {
-          setIsLoading(false);
-        }
-      }
-    },
-    [session?.user.id]
-  );
-
-  useEffect(() => {
-    refreshAudiobooks({ isInitialLoad: true });
-  }, [refreshAudiobooks]);
+  // No longer fetches automatically on mount.
+  // The component is now in full control.
 
   return { audiobooks, isLoading, error, refreshAudiobooks };
 }
