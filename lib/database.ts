@@ -37,7 +37,8 @@ export async function getAudiobooksForLibrary(userId: string) {
       created_at,
       text_content,
       is_published,
-      bookmarks_count
+      bookmarks_count,
+      audio_url
     `
   );
 

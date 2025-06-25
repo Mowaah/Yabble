@@ -1,6 +1,7 @@
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
+import * as FileSystem from 'expo-file-system';
 
 export class MediaError extends Error {
   isPermissionError?: boolean;
@@ -17,10 +18,7 @@ export class MediaError extends Error {
  * @param title The title of the audiobook (used if an album is created).
  * @throws {MediaError} If permissions are denied or saving fails.
  */
-export const saveAudioToDevice = async (
-  localFileUri: string,
-  title: string
-): Promise<void> => {
+export const saveAudioToDevice = async (localFileUri: string, title: string): Promise<void> => {
   if (Platform.OS !== 'android') {
     console.warn('saveAudioToDevice is primarily intended for Android.');
     // For other platforms, this function might do nothing or adapt.
@@ -28,9 +26,7 @@ export const saveAudioToDevice = async (
     return;
   }
 
-  const { status, canAskAgain } = await MediaLibrary.requestPermissionsAsync(
-    true
-  );
+  const { status, canAskAgain } = await MediaLibrary.requestPermissionsAsync(true);
   if (status !== 'granted') {
     const message = canAskAgain
       ? 'Storage permission is required to save the audiobook.'
@@ -39,13 +35,20 @@ export const saveAudioToDevice = async (
   }
 
   try {
-    await MediaLibrary.createAssetAsync(localFileUri);
-    console.log(`Asset created successfully for ${title} at ${localFileUri}`);
+    // WORKAROUND: Copy the file to a new unique location in the cache directory.
+    // This can help with issues where createAssetAsync fails on certain Android versions/devices
+    // by ensuring we're working with a fresh, un-locked file descriptor.
+    const newFileUri = `${FileSystem.cacheDirectory}${Date.now()}_${title.replace(/[^a-zA-Z0-9]/g, '_')}.mp3`;
+    await FileSystem.copyAsync({
+      from: localFileUri,
+      to: newFileUri,
+    });
+
+    await MediaLibrary.createAssetAsync(newFileUri);
+    console.log(`Asset created successfully for ${title} at ${newFileUri}`);
   } catch (e: any) {
     console.error(`Error saving audio to device for ${title}:`, e);
-    throw new MediaError(
-      `Failed to save "${title}" to your device's media library: ${e.message}`
-    );
+    throw new MediaError(`Failed to save "${title}" to your device's media library: ${e.message}`);
   }
 };
 
@@ -56,11 +59,7 @@ export const saveAudioToDevice = async (
  * @param message Optional message to accompany the share.
  * @throws {MediaError} If sharing is unavailable or the sharing action fails.
  */
-export const shareAudioFile = async (
-  localFileUri: string,
-  title: string,
-  message?: string
-): Promise<void> => {
+export const shareAudioFile = async (localFileUri: string, title: string, message?: string): Promise<void> => {
   if (!(await Sharing.isAvailableAsync())) {
     throw new MediaError('Sharing is not available on this device.');
   }
@@ -81,8 +80,6 @@ export const shareAudioFile = async (
   } catch (e: any) {
     console.error(`Error initiating share for ${title}:`, e);
     // Error might be due to user cancellation on some platforms, or actual error.
-    throw new MediaError(
-      `Failed to initiate sharing for "${title}": ${e.message}`
-    );
+    throw new MediaError(`Failed to initiate sharing for "${title}": ${e.message}`);
   }
 };
