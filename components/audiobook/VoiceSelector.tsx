@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { StyleSheet, Text, View, FlatList, Pressable, Animated, Dimensions, ActivityIndicator } from 'react-native';
 import { Play, Pause, Sparkles } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -25,6 +25,10 @@ interface VoiceSelectorProps {
     speed?: number;
     stability?: number;
   };
+}
+
+export interface VoiceSelectorRef {
+  stopPreview: () => void;
 }
 
 // Generate unique gradient colors for each voice
@@ -56,336 +60,345 @@ const generateGradientColors = (name: string, gender: 'male' | 'female') => {
   return gradients[Math.abs(hash) % gradients.length];
 };
 
-export default function VoiceSelector({
-  voices,
-  selectedVoiceId,
-  onSelectVoice,
-  onPreviewVoice,
-  voiceSettings,
-}: VoiceSelectorProps) {
-  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
-  const [loadingVoiceId, setLoadingVoiceId] = useState<string | null>(null);
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const [currentPreviewUrl, setCurrentPreviewUrl] = useState<string | null>(null);
-  const [animatedValues] = useState(() =>
-    voices.reduce((acc, voice) => {
-      acc[voice.voice_id] = {
-        scale: new Animated.Value(1),
-        gradientAnimation: new Animated.Value(0),
-        pulseAnimation: new Animated.Value(1),
-      };
-      return acc;
-    }, {} as Record<string, { scale: Animated.Value; gradientAnimation: Animated.Value; pulseAnimation: Animated.Value }>)
-  );
+const VoiceSelector = forwardRef<VoiceSelectorRef, VoiceSelectorProps>(
+  ({ voices, selectedVoiceId, onSelectVoice, onPreviewVoice, voiceSettings }, ref) => {
+    const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
+    const [loadingVoiceId, setLoadingVoiceId] = useState<string | null>(null);
+    const [sound, setSound] = useState<Audio.Sound | null>(null);
+    const [currentPreviewUrl, setCurrentPreviewUrl] = useState<string | null>(null);
+    const [animatedValues] = useState(() =>
+      voices.reduce((acc, voice) => {
+        acc[voice.voice_id] = {
+          scale: new Animated.Value(1),
+          gradientAnimation: new Animated.Value(0),
+          pulseAnimation: new Animated.Value(1),
+        };
+        return acc;
+      }, {} as Record<string, { scale: Animated.Value; gradientAnimation: Animated.Value; pulseAnimation: Animated.Value }>)
+    );
 
-  const voiceCategories = [
-    {
-      id: 'female',
-      title: '👩 Female Voices',
-      gender: 'female',
-    },
-    {
-      id: 'male',
-      title: '👨 Male Voices',
-      gender: 'male',
-    },
-  ];
+    const voiceCategories = [
+      {
+        id: 'female',
+        title: '👩 Female Voices',
+        gender: 'female',
+      },
+      {
+        id: 'male',
+        title: '👨 Male Voices',
+        gender: 'male',
+      },
+    ];
 
-  const getVoicesByCategory = (gender: string) => {
-    return voices.filter((voice) => voice.gender === gender);
-  };
+    const getVoicesByCategory = (gender: string) => {
+      return voices.filter((voice) => voice.gender === gender);
+    };
 
-  const stopCurrentSound = async () => {
-    if (sound) {
-      try {
-        await sound.stopAsync();
-        await sound.unloadAsync();
-        setSound(null);
-        setCurrentPreviewUrl(null);
+    const stopCurrentSound = async () => {
+      if (sound) {
+        try {
+          await sound.stopAsync();
+          await sound.unloadAsync();
+          setSound(null);
+          setCurrentPreviewUrl(null);
 
-        // Stop all animations
-        Object.values(animatedValues).forEach(({ gradientAnimation, pulseAnimation }) => {
-          gradientAnimation.stopAnimation();
-          pulseAnimation.stopAnimation();
-          Animated.timing(gradientAnimation, {
+          // Stop all animations
+          Object.values(animatedValues).forEach(({ gradientAnimation, pulseAnimation }) => {
+            gradientAnimation.stopAnimation();
+            pulseAnimation.stopAnimation();
+            Animated.timing(gradientAnimation, {
+              toValue: 0,
+              duration: 300,
+              useNativeDriver: false,
+            }).start();
+            Animated.timing(pulseAnimation, {
+              toValue: 1,
+              duration: 300,
+              useNativeDriver: true,
+            }).start();
+          });
+
+          setPlayingVoiceId(null);
+          setLoadingVoiceId(null);
+        } catch (error) {
+          if ((error as any).message.includes('Cannot unload a sound that is not loaded')) {
+            // This can happen during fast navigation, it's safe to ignore
+            setSound(null);
+          } else {
+            console.error('Error stopping sound:', error);
+          }
+        }
+      }
+    };
+
+    useImperativeHandle(ref, () => ({
+      stopPreview: stopCurrentSound,
+    }));
+
+    const animateVoiceCard = (voiceId: string, isPlaying: boolean) => {
+      const animations = animatedValues[voiceId];
+      if (!animations) return;
+
+      if (isPlaying) {
+        // Start playing animations
+        Animated.parallel([
+          Animated.loop(
+            Animated.timing(animations.gradientAnimation, {
+              toValue: 1,
+              duration: 3000,
+              useNativeDriver: false,
+            })
+          ),
+          Animated.loop(
+            Animated.sequence([
+              Animated.timing(animations.pulseAnimation, {
+                toValue: 1.1,
+                duration: 800,
+                useNativeDriver: true,
+              }),
+              Animated.timing(animations.pulseAnimation, {
+                toValue: 1,
+                duration: 800,
+                useNativeDriver: true,
+              }),
+            ])
+          ),
+        ]).start();
+      } else {
+        // Stop animations
+        animations.gradientAnimation.stopAnimation();
+        animations.pulseAnimation.stopAnimation();
+        Animated.parallel([
+          Animated.timing(animations.gradientAnimation, {
             toValue: 0,
             duration: 300,
             useNativeDriver: false,
-          }).start();
-          Animated.timing(pulseAnimation, {
+          }),
+          Animated.timing(animations.pulseAnimation, {
             toValue: 1,
             duration: 300,
             useNativeDriver: true,
-          }).start();
+          }),
+        ]).start();
+      }
+    };
+
+    const handlePlayPreview = async (voiceId: string, previewUrl?: string) => {
+      try {
+        if (!previewUrl) return;
+
+        const isSameVoice = playingVoiceId === voiceId;
+        const isSameUrl = currentPreviewUrl === previewUrl;
+
+        if (isSameVoice && sound) {
+          const status = await sound.getStatusAsync();
+          if (status.isLoaded) {
+            if (status.isPlaying) {
+              await sound.pauseAsync();
+              setPlayingVoiceId(null);
+              animateVoiceCard(voiceId, false);
+            } else {
+              await sound.playAsync();
+              setPlayingVoiceId(voiceId);
+              animateVoiceCard(voiceId, true);
+            }
+          }
+          return;
+        }
+
+        // Stop any currently playing sound before starting a new one
+        await stopCurrentSound();
+
+        setLoadingVoiceId(voiceId);
+        setCurrentPreviewUrl(previewUrl);
+
+        const { sound: newSound } = await Audio.Sound.createAsync(
+          { uri: previewUrl },
+          {
+            shouldPlay: true,
+            volume: audioEffects.getVolume(),
+            rate: voiceSettings?.speed || 1,
+          }
+        );
+
+        setSound(newSound);
+        setLoadingVoiceId(null);
+        setPlayingVoiceId(voiceId);
+        animateVoiceCard(voiceId, true);
+
+        // Handle playback completion
+        newSound.setOnPlaybackStatusUpdate((status) => {
+          if (status.isLoaded && status.didJustFinish) {
+            setPlayingVoiceId(null);
+            setSound(null);
+            setCurrentPreviewUrl(null);
+            animateVoiceCard(voiceId, false);
+          }
         });
 
+        await newSound.playAsync();
+      } catch (error) {
+        console.error('Error playing preview:', error);
         setPlayingVoiceId(null);
         setLoadingVoiceId(null);
-      } catch (error) {
-        console.error('Error stopping sound:', error);
+        setSound(null);
+        setCurrentPreviewUrl(null);
+        animateVoiceCard(voiceId, false);
       }
-    }
-  };
-
-  const animateVoiceCard = (voiceId: string, isPlaying: boolean) => {
-    const animations = animatedValues[voiceId];
-    if (!animations) return;
-
-    if (isPlaying) {
-      // Start playing animations
-      Animated.parallel([
-        Animated.loop(
-          Animated.timing(animations.gradientAnimation, {
-            toValue: 1,
-            duration: 3000,
-            useNativeDriver: false,
-          })
-        ),
-        Animated.loop(
-          Animated.sequence([
-            Animated.timing(animations.pulseAnimation, {
-              toValue: 1.1,
-              duration: 800,
-              useNativeDriver: true,
-            }),
-            Animated.timing(animations.pulseAnimation, {
-              toValue: 1,
-              duration: 800,
-              useNativeDriver: true,
-            }),
-          ])
-        ),
-      ]).start();
-    } else {
-      // Stop animations
-      animations.gradientAnimation.stopAnimation();
-      animations.pulseAnimation.stopAnimation();
-      Animated.parallel([
-        Animated.timing(animations.gradientAnimation, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: false,
-        }),
-        Animated.timing(animations.pulseAnimation, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-  };
-
-  const handlePlayPreview = async (voiceId: string, previewUrl?: string) => {
-    try {
-      if (!previewUrl) return;
-
-      const isSameVoice = playingVoiceId === voiceId;
-      const isSameUrl = currentPreviewUrl === previewUrl;
-
-      if (isSameVoice && sound) {
-        const status = await sound.getStatusAsync();
-        if (status.isLoaded) {
-          if (status.isPlaying) {
-            await sound.pauseAsync();
-            setPlayingVoiceId(null);
-            animateVoiceCard(voiceId, false);
-          } else {
-            await sound.playAsync();
-            setPlayingVoiceId(voiceId);
-            animateVoiceCard(voiceId, true);
-          }
-        }
-        return;
-      }
-
-      // Stop any currently playing sound before starting a new one
-      await stopCurrentSound();
-
-      setLoadingVoiceId(voiceId);
-      setCurrentPreviewUrl(previewUrl);
-
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: previewUrl },
-        {
-          shouldPlay: true,
-          volume: audioEffects.getVolume(),
-          rate: voiceSettings?.speed || 1,
-        }
-      );
-
-      setSound(newSound);
-      setLoadingVoiceId(null);
-      setPlayingVoiceId(voiceId);
-      animateVoiceCard(voiceId, true);
-
-      // Handle playback completion
-      newSound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          setPlayingVoiceId(null);
-          setSound(null);
-          setCurrentPreviewUrl(null);
-          animateVoiceCard(voiceId, false);
-        }
-      });
-
-      await newSound.playAsync();
-    } catch (error) {
-      console.error('Error playing preview:', error);
-      setPlayingVoiceId(null);
-      setLoadingVoiceId(null);
-      setSound(null);
-      setCurrentPreviewUrl(null);
-      animateVoiceCard(voiceId, false);
-    }
-  };
-
-  const handleVoicePress = (voiceId: string) => {
-    const animations = animatedValues[voiceId];
-    if (animations) {
-      Animated.sequence([
-        Animated.timing(animations.scale, {
-          toValue: 0.95,
-          duration: 100,
-          useNativeDriver: true,
-        }),
-        Animated.timing(animations.scale, {
-          toValue: 1,
-          duration: 100,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-    onSelectVoice(voiceId);
-  };
-
-  // Cleanup sound on unmount or when voice settings change
-  React.useEffect(() => {
-    return () => {
-      stopCurrentSound();
     };
-  }, [voiceSettings]);
 
-  const renderVoiceItem = ({ item }: { item: VoiceSelectorProps['voices'][0] }) => {
-    const isSelected = item.voice_id === selectedVoiceId;
-    const isPlaying = item.voice_id === playingVoiceId;
-    const isLoading = item.voice_id === loadingVoiceId;
-    const animations = animatedValues[item.voice_id];
-    const gradientColors = generateGradientColors(item.name, item.gender || 'female');
+    const handleVoicePress = (voiceId: string) => {
+      const animations = animatedValues[voiceId];
+      if (animations) {
+        Animated.sequence([
+          Animated.timing(animations.scale, {
+            toValue: 0.95,
+            duration: 100,
+            useNativeDriver: true,
+          }),
+          Animated.timing(animations.scale, {
+            toValue: 1,
+            duration: 100,
+            useNativeDriver: true,
+          }),
+        ]).start();
+      }
+      onSelectVoice(voiceId);
+    };
 
-    if (!animations) return null;
+    useEffect(() => {
+      // Cleanup function to stop audio when the component unmounts
+      return () => {
+        stopCurrentSound();
+      };
+    }, []);
+
+    const renderVoiceItem = ({ item }: { item: VoiceSelectorProps['voices'][0] }) => {
+      const isSelected = item.voice_id === selectedVoiceId;
+      const isPlaying = item.voice_id === playingVoiceId;
+      const isLoading = item.voice_id === loadingVoiceId;
+      const animations = animatedValues[item.voice_id];
+      const gradientColors = generateGradientColors(item.name, item.gender || 'female');
+
+      if (!animations) return null;
+
+      return (
+        <Animated.View style={[{ transform: [{ scale: animations.scale }] }]}>
+          <Pressable
+            style={[styles.voiceCard, isSelected && styles.selectedVoiceCard]}
+            onPress={() => handleVoicePress(item.voice_id)}
+          >
+            {/* Animated Gradient Background with Play Button */}
+            <Animated.View style={[styles.gradientContainer, { transform: [{ scale: animations.pulseAnimation }] }]}>
+              <LinearGradient
+                colors={gradientColors as any}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.gradientBackground}
+              >
+                {/* Moving overlay for animation effect */}
+                {isPlaying && (
+                  <Animated.View
+                    style={[
+                      styles.movingOverlay,
+                      {
+                        transform: [
+                          {
+                            translateX: animations.gradientAnimation.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [-60, 60],
+                            }),
+                          },
+                        ],
+                      },
+                    ]}
+                  />
+                )}
+
+                {/* Play Button in center (replaces initial) */}
+                {item.preview_url ? (
+                  <Pressable
+                    style={[
+                      styles.centerPlayButton,
+                      isPlaying && styles.centerPlayButtonActive,
+                      isLoading && styles.centerPlayButtonLoading,
+                    ]}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handlePlayPreview(item.voice_id, item.preview_url);
+                      if (!isPlaying && !isLoading) {
+                        onPreviewVoice?.(item.voice_id);
+                      }
+                    }}
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <ActivityIndicator size="small" color={Colors.white} />
+                    ) : isPlaying ? (
+                      <Pause size={16} color={Colors.white} />
+                    ) : (
+                      <Play size={16} color={Colors.white} />
+                    )}
+                  </Pressable>
+                ) : (
+                  <Text style={styles.voiceInitial}>{item.name.charAt(0).toUpperCase()}</Text>
+                )}
+
+                {/* Selected Badge */}
+                {isSelected && (
+                  <View style={styles.selectedBadge}>
+                    <Sparkles size={8} color={Colors.white} />
+                  </View>
+                )}
+              </LinearGradient>
+            </Animated.View>
+
+            {/* Voice Name */}
+            <Text style={[styles.voiceName, isSelected && styles.selectedVoiceName]} numberOfLines={1}>
+              {item.name}
+            </Text>
+          </Pressable>
+        </Animated.View>
+      );
+    };
 
     return (
-      <Animated.View style={[{ transform: [{ scale: animations.scale }] }]}>
-        <Pressable
-          style={[styles.voiceCard, isSelected && styles.selectedVoiceCard]}
-          onPress={() => handleVoicePress(item.voice_id)}
-        >
-          {/* Animated Gradient Background with Play Button */}
-          <Animated.View style={[styles.gradientContainer, { transform: [{ scale: animations.pulseAnimation }] }]}>
-            <LinearGradient
-              colors={gradientColors as any}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.gradientBackground}
-            >
-              {/* Moving overlay for animation effect */}
-              {isPlaying && (
-                <Animated.View
-                  style={[
-                    styles.movingOverlay,
-                    {
-                      transform: [
-                        {
-                          translateX: animations.gradientAnimation.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [-60, 60],
-                          }),
-                        },
-                      ],
-                    },
-                  ]}
-                />
-              )}
+      <View style={styles.container}>
+        {voiceCategories.map((category) => {
+          const categoryVoices = getVoicesByCategory(category.gender);
 
-              {/* Play Button in center (replaces initial) */}
-              {item.preview_url ? (
-                <Pressable
-                  style={[
-                    styles.centerPlayButton,
-                    isPlaying && styles.centerPlayButtonActive,
-                    isLoading && styles.centerPlayButtonLoading,
-                  ]}
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    handlePlayPreview(item.voice_id, item.preview_url);
-                    if (!isPlaying && !isLoading) {
-                      onPreviewVoice?.(item.voice_id);
-                    }
-                  }}
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <ActivityIndicator size="small" color={Colors.white} />
-                  ) : isPlaying ? (
-                    <Pause size={16} color={Colors.white} />
-                  ) : (
-                    <Play size={16} color={Colors.white} />
-                  )}
-                </Pressable>
-              ) : (
-                <Text style={styles.voiceInitial}>{item.name.charAt(0).toUpperCase()}</Text>
-              )}
+          if (categoryVoices.length === 0) return null;
 
-              {/* Selected Badge */}
-              {isSelected && (
-                <View style={styles.selectedBadge}>
-                  <Sparkles size={8} color={Colors.white} />
+          return (
+            <View key={category.id} style={styles.categorySection}>
+              <View style={styles.categoryHeader}>
+                <Text style={styles.categoryTitle}>{category.title}</Text>
+                <View style={styles.categoryBadge}>
+                  <Text style={styles.categoryBadgeText}>{categoryVoices.length} voices</Text>
                 </View>
-              )}
-            </LinearGradient>
-          </Animated.View>
-
-          {/* Voice Name */}
-          <Text style={[styles.voiceName, isSelected && styles.selectedVoiceName]} numberOfLines={1}>
-            {item.name}
-          </Text>
-        </Pressable>
-      </Animated.View>
-    );
-  };
-
-  return (
-    <View style={styles.container}>
-      {voiceCategories.map((category) => {
-        const categoryVoices = getVoicesByCategory(category.gender);
-
-        if (categoryVoices.length === 0) return null;
-
-        return (
-          <View key={category.id} style={styles.categorySection}>
-            <View style={styles.categoryHeader}>
-              <Text style={styles.categoryTitle}>{category.title}</Text>
-              <View style={styles.categoryBadge}>
-                <Text style={styles.categoryBadgeText}>{categoryVoices.length} voices</Text>
               </View>
-            </View>
 
-            <FlatList
-              data={categoryVoices}
-              renderItem={renderVoiceItem}
-              keyExtractor={(item) => item.voice_id}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.voiceList}
-              snapToInterval={102}
-              decelerationRate="fast"
-            />
-          </View>
-        );
-      })}
-    </View>
-  );
-}
+              <FlatList
+                data={categoryVoices}
+                renderItem={renderVoiceItem}
+                keyExtractor={(item) => item.voice_id}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.voiceList}
+                snapToInterval={102}
+                decelerationRate="fast"
+              />
+            </View>
+          );
+        })}
+      </View>
+    );
+  }
+);
+
+VoiceSelector.displayName = 'VoiceSelector';
+
+export default VoiceSelector;
 
 const styles = StyleSheet.create({
   container: {

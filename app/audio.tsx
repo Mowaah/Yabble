@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, Text, View, ScrollView, Pressable, Animated, Alert } from 'react-native';
 import Slider from '@react-native-community/slider';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { ChevronLeft, Music, Play, Volume2, Pause, Sparkles, Headphones } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Colors from '../constants/Colors';
@@ -245,11 +245,18 @@ export default function AudioScreen() {
           // Update the background effect
           textContent.backgroundEffect = selectedEffect;
 
+          const { voiceDuration = 0 } = await audioEffects.getPlaybackStatus();
+
           // Update audiobook with background effect and mark as completed
           const result = await updateAudiobook(audiobookId, {
             text_content: JSON.stringify(textContent),
-            status: 'completed', // Mark as completed when user finishes the workflow
+            status: 'completed',
+            duration: Math.round(voiceDuration / 1000),
           });
+
+          if (result.error) {
+            throw result.error;
+          }
         } else {
           throw new Error('No audiobook data found');
         }
@@ -282,6 +289,16 @@ export default function AudioScreen() {
       stopWaveAnimation();
     };
   }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      return () => {
+        audioEffects.cleanup();
+        setPlayingPreviewId(null);
+        stopWaveAnimation();
+      };
+    }, [])
+  );
 
   return (
     <SafeAreaView style={styles.safeArea}>

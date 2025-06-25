@@ -8,7 +8,7 @@ import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
 import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../lib/supabase';
-import { updateAudiobook } from '../../lib/database';
+import { upsertAudiobookProgress, toggleBookmark, getAudiobookDetails } from '../../lib/database';
 import HighlightedText from '../../components/audiobook/HighlightedText';
 import PlayerSkeleton from '../../components/audiobook/PlayerSkeleton';
 import { mockAudioEffects } from '../../utils/mockData';
@@ -53,24 +53,19 @@ export default function AudiobookPlayerScreen() {
         return;
       }
       try {
-        const { data, error } = await db
-          .from('audiobooks')
-          .select('*')
-          .eq('id', id as string)
-          .eq('user_id', session.user.id)
-          .single();
-
+        const { data, error } = await getAudiobookDetails(id as string, session.user.id);
         if (error) throw error;
         setAudiobook(data);
       } catch (error) {
-        console.error('Error fetching audiobook:', error);
+        console.error('Error fetching audiobook details:', error);
+        setAudiobook(null);
       } finally {
         setLoading(false);
       }
     }
 
     fetchAudiobook();
-  }, [id, session?.user?.id]);
+  }, [id, session]);
 
   const loadAudio = async (book: any) => {
     if (!book.audio_url) return;
@@ -117,16 +112,14 @@ export default function AudiobookPlayerScreen() {
         clearInterval(statusIntervalRef.current);
       }
       const saveProgress = async () => {
-        if (audiobook?.id && positionRef.current > 0) {
-          await updateAudiobook(audiobook.id, {
-            last_position_millis: positionRef.current,
-          });
+        if (audiobook?.id && session?.user?.id && positionRef.current > 0) {
+          await upsertAudiobookProgress(session.user.id, audiobook.id, positionRef.current);
         }
       };
       saveProgress();
       audioEffects.stopAllAudio();
     };
-  }, [audiobook]);
+  }, [audiobook, session]);
 
   // Smooth status polling - only update position and sync UI state
   useEffect(() => {
@@ -249,23 +242,27 @@ export default function AudiobookPlayerScreen() {
   };
 
   const handleBookmark = async () => {
-    if (!audiobook?.id) return;
+    if (!audiobook?.id || !session?.user?.id) return;
 
-    const newBookmarkedState = !audiobook.bookmarked;
+    const currentBookmarkState = audiobook.is_bookmarked;
 
+    // Optimistically update the UI for instant feedback
     setAudiobook({
       ...audiobook,
-      bookmarked: newBookmarkedState,
+      is_bookmarked: !currentBookmarkState,
     });
 
-    try {
-      await updateAudiobook(audiobook.id, { bookmarked: newBookmarkedState });
-    } catch (error) {
+    // Sync the change with the database
+    const { error } = await toggleBookmark(audiobook.id, session.user.id, currentBookmarkState);
+
+    // If the database call fails, revert the UI change and show an alert
+    if (error) {
       console.error('Failed to sync bookmark status:', error);
       setAudiobook({
         ...audiobook,
-        bookmarked: !newBookmarkedState,
+        is_bookmarked: currentBookmarkState,
       });
+      Alert.alert('Error', 'Could not update your bookmark. Please try again.');
     }
   };
 
@@ -333,8 +330,8 @@ export default function AudiobookPlayerScreen() {
           <Pressable style={styles.controlButton} onPress={handleBookmark}>
             <Bookmark
               size={24}
-              color={audiobook?.bookmarked ? Colors.primary : Colors.gray[600]}
-              fill={audiobook?.bookmarked ? Colors.primary : 'none'}
+              color={audiobook?.is_bookmarked ? Colors.primary : Colors.gray[600]}
+              fill={audiobook?.is_bookmarked ? Colors.primary : 'none'}
             />
           </Pressable>
           <Pressable style={styles.controlButton} onPress={() => skipBy(-10000)}>

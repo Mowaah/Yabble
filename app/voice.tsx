@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, Pressable, Alert, Animated, Dimensions, Vibration } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import React, { useState, useEffect, useRef } from 'react';
+import { StyleSheet, Text, View, ScrollView, Pressable, Alert, Animated, Vibration } from 'react-native';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { ChevronLeft, Mic, Sparkles, Settings, ChevronDown, ChevronUp } from 'lucide-react-native';
 import Slider from '@react-native-community/slider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Colors from '../constants/Colors';
 import Layout from '../constants/Layout';
 import Button from '../components/ui/Button';
-import VoiceSelector from '../components/audiobook/VoiceSelector';
+import VoiceSelector, { VoiceSelectorRef } from '../components/audiobook/VoiceSelector';
 import { useVoices } from '../hooks/useVoices';
 import { updateAudiobook } from '../lib/database';
 import { elevenlabsApi } from '../lib/elevenlabs';
@@ -27,6 +27,7 @@ export default function VoiceScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [fadeAnim] = useState(new Animated.Value(0));
+  const voiceSelectorRef = useRef<VoiceSelectorRef>(null);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -35,6 +36,16 @@ export default function VoiceScreen() {
       useNativeDriver: true,
     }).start();
   }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      // When the screen is focused, we don't need to do anything.
+      // The cleanup function will be called when the screen is unfocused.
+      return () => {
+        voiceSelectorRef.current?.stopPreview();
+      };
+    }, [])
+  );
 
   const handleSelectVoice = (voiceId: string) => {
     setSelectedVoice(voiceId);
@@ -153,6 +164,7 @@ export default function VoiceScreen() {
         >
           {/* Voice Selection */}
           <VoiceSelector
+            ref={voiceSelectorRef}
             voices={voices}
             selectedVoiceId={selectedVoice}
             onSelectVoice={handleSelectVoice}

@@ -1,8 +1,29 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, Alert, ActivityIndicator, Pressable, Dimensions } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+  ScrollView,
+  Alert,
+  ActivityIndicator,
+  Pressable,
+  Dimensions,
+  Image,
+} from 'react-native';
 import { useRouter } from 'expo-router';
-import { FileUp, Mic, Link as LinkIcon, Text as TextIcon, Bot, ChevronRight, Play, Plus } from 'lucide-react-native';
+import {
+  FileUp,
+  Mic,
+  Link as LinkIcon,
+  Text as TextIcon,
+  Bot,
+  ChevronRight,
+  Play,
+  Plus,
+  Image as ImageIcon,
+} from 'lucide-react-native';
 import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '../../constants/Colors';
 import Layout from '../../constants/Layout';
@@ -29,6 +50,7 @@ export default function CreateScreen() {
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [coverImage, setCoverImage] = useState<string | null>(null);
   const [isProcessingFile, setIsProcessingFile] = useState(false);
   const insets = useSafeAreaInsets();
 
@@ -84,6 +106,19 @@ export default function CreateScreen() {
     }
   };
 
+  const handleImagePicker = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [2, 3],
+      quality: 0.7,
+    });
+
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      setCoverImage(result.assets[0].uri);
+    }
+  };
+
   const handleUrlInput = () => {
     handleMethodSelect(InputMethod.URL);
     Alert.alert('Coming Soon', 'URL processing is not yet implemented.');
@@ -115,6 +150,7 @@ export default function CreateScreen() {
           originalText: contentToProcess,
           backgroundEffect: null,
         }),
+        coverImageUri: coverImage,
       });
 
       if (!audiobook) {
@@ -250,6 +286,20 @@ export default function CreateScreen() {
               <View style={styles.inputContainer}>
                 <Text style={styles.inputLabel}>Audiobook Title</Text>
                 <Input placeholder="Give your audiobook a title" value={title} onChangeText={setTitle} />
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>Cover Image (Optional)</Text>
+                <Pressable style={styles.imagePicker} onPress={handleImagePicker}>
+                  {coverImage ? (
+                    <Image source={{ uri: coverImage }} style={styles.coverPreview} />
+                  ) : (
+                    <View style={styles.imagePlaceholder}>
+                      <ImageIcon size={32} color={Colors.gray[400]} />
+                      <Text style={styles.imagePlaceholderText}>Tap to select image</Text>
+                    </View>
+                  )}
+                </Pressable>
               </View>
 
               <View style={styles.actionButtons}>
@@ -440,6 +490,30 @@ const styles = StyleSheet.create({
   createButton: {
     flex: 2,
     backgroundColor: Colors.primary,
+  },
+  imagePicker: {
+    width: '100%',
+    height: 180,
+    backgroundColor: Colors.gray[50],
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.gray[200],
+    overflow: 'hidden',
+  },
+  coverPreview: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  imagePlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imagePlaceholderText: {
+    marginTop: Layout.spacing.sm,
+    color: Colors.gray[500],
   },
   tipsSection: {
     backgroundColor: Colors.white,
