@@ -39,6 +39,20 @@ if (typeof global !== 'undefined') {
   if (typeof global.navigator === 'undefined') {
     global.navigator = { userAgent: 'node' };
   }
+
+  // Mock AsyncStorage for Node.js environment
+  if (typeof global.AsyncStorage === 'undefined') {
+    global.AsyncStorage = {
+      getItem: async () => null,
+      setItem: async () => {},
+      removeItem: async () => {},
+      clear: async () => {},
+      getAllKeys: async () => [],
+      multiGet: async () => [],
+      multiSet: async () => {},
+      multiRemove: async () => {},
+    };
+  }
 }
 
 module.exports = config;
