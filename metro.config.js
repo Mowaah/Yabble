@@ -30,9 +30,42 @@ if (typeof global !== 'undefined') {
     global.window = {};
   }
   
-  // Polyfill document object for Node.js environment
+  // Polyfill document object for Node.js environment with createElement method
   if (typeof global.document === 'undefined') {
-    global.document = {};
+    global.document = {
+      createElement: (tagName) => ({
+        tagName: tagName,
+        style: {},
+        setAttribute: () => {},
+        getAttribute: () => null,
+        appendChild: () => {},
+        removeChild: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        innerHTML: '',
+        textContent: '',
+        children: [],
+        parentNode: null,
+        classList: {
+          add: () => {},
+          remove: () => {},
+          contains: () => false,
+          toggle: () => false,
+        },
+      }),
+      getElementById: () => null,
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      body: {
+        appendChild: () => {},
+        removeChild: () => {},
+        style: {},
+      },
+      head: {
+        appendChild: () => {},
+        removeChild: () => {},
+      },
+    };
   }
   
   // Polyfill navigator object for Node.js environment
@@ -40,17 +73,33 @@ if (typeof global !== 'undefined') {
     global.navigator = { userAgent: 'node' };
   }
 
-  // Mock AsyncStorage for Node.js environment
+  // Mock AsyncStorage for Node.js environment with proper methods
   if (typeof global.AsyncStorage === 'undefined') {
     global.AsyncStorage = {
-      getItem: async () => null,
-      setItem: async () => {},
-      removeItem: async () => {},
-      clear: async () => {},
-      getAllKeys: async () => [],
-      multiGet: async () => [],
-      multiSet: async () => {},
-      multiRemove: async () => {},
+      getItem: async (key) => {
+        return Promise.resolve(null);
+      },
+      setItem: async (key, value) => {
+        return Promise.resolve();
+      },
+      removeItem: async (key) => {
+        return Promise.resolve();
+      },
+      clear: async () => {
+        return Promise.resolve();
+      },
+      getAllKeys: async () => {
+        return Promise.resolve([]);
+      },
+      multiGet: async (keys) => {
+        return Promise.resolve(keys.map(key => [key, null]));
+      },
+      multiSet: async (keyValuePairs) => {
+        return Promise.resolve();
+      },
+      multiRemove: async (keys) => {
+        return Promise.resolve();
+      },
     };
   }
 }
