@@ -19,4 +19,26 @@ config.resolver = {
   sourceExts: [...config.resolver.sourceExts, 'svg'],
 };
 
+// Add polyfills for browser globals to fix "window is not defined" error
+// This is needed for React Native libraries during Node.js build process
+config.resolver.platforms = ['ios', 'android', 'native', 'web'];
+
+// Add global polyfills for Node.js environment
+if (typeof global !== 'undefined') {
+  // Polyfill window object for Node.js environment
+  if (typeof global.window === 'undefined') {
+    global.window = {};
+  }
+  
+  // Polyfill document object for Node.js environment
+  if (typeof global.document === 'undefined') {
+    global.document = {};
+  }
+  
+  // Polyfill navigator object for Node.js environment
+  if (typeof global.navigator === 'undefined') {
+    global.navigator = { userAgent: 'node' };
+  }
+}
+
 module.exports = config;
