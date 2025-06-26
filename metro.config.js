@@ -30,6 +30,24 @@ if (typeof global !== 'undefined') {
     global.window = {};
   }
   
+  // Polyfill localStorage with complete implementation
+  if (typeof global.window.localStorage === 'undefined') {
+    const storage = new Map();
+    global.window.localStorage = {
+      getItem: (key) => storage.get(key) || null,
+      setItem: (key, value) => storage.set(key, String(value)),
+      removeItem: (key) => storage.delete(key),
+      clear: () => storage.clear(),
+      get length() {
+        return storage.size;
+      },
+      key: (index) => {
+        const keys = Array.from(storage.keys());
+        return keys[index] || null;
+      }
+    };
+  }
+  
   // Polyfill document object for Node.js environment with createElement method
   if (typeof global.document === 'undefined') {
     global.document = {
