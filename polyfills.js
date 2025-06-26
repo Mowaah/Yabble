@@ -69,3 +69,93 @@ if (typeof global.WebSocket === 'undefined') {
     };
   }
 }
+
+// AsyncStorage polyfill - CRITICAL: Must be defined before any modules that use it
+if (typeof global.AsyncStorage === 'undefined') {
+  global.AsyncStorage = {
+    getItem: async (key) => {
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          return Promise.resolve(window.localStorage.getItem(key));
+        }
+        return Promise.resolve(null);
+      } catch (e) {
+        return Promise.resolve(null);
+      }
+    },
+    setItem: async (key, value) => {
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.setItem(key, value);
+        }
+        return Promise.resolve();
+      } catch (e) {
+        return Promise.resolve();
+      }
+    },
+    removeItem: async (key) => {
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.removeItem(key);
+        }
+        return Promise.resolve();
+      } catch (e) {
+        return Promise.resolve();
+      }
+    },
+    clear: async () => {
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.clear();
+        }
+        return Promise.resolve();
+      } catch (e) {
+        return Promise.resolve();
+      }
+    },
+    getAllKeys: async () => {
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          return Promise.resolve(Object.keys(window.localStorage));
+        }
+        return Promise.resolve([]);
+      } catch (e) {
+        return Promise.resolve([]);
+      }
+    },
+    multiGet: async (keys) => {
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          return Promise.resolve(keys.map(key => [key, window.localStorage.getItem(key)]));
+        }
+        return Promise.resolve(keys.map(key => [key, null]));
+      } catch (e) {
+        return Promise.resolve(keys.map(key => [key, null]));
+      }
+    },
+    multiSet: async (keyValuePairs) => {
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          keyValuePairs.forEach(([key, value]) => {
+            window.localStorage.setItem(key, value);
+          });
+        }
+        return Promise.resolve();
+      } catch (e) {
+        return Promise.resolve();
+      }
+    },
+    multiRemove: async (keys) => {
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          keys.forEach(key => {
+            window.localStorage.removeItem(key);
+          });
+        }
+        return Promise.resolve();
+      } catch (e) {
+        return Promise.resolve();
+      }
+    },
+  };
+}
