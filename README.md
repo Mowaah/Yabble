@@ -80,7 +80,7 @@ To get this project running locally, follow these steps:
 Once the app is running:
 
 1. Sign up for a new account or sign in.
-2. Navigate to the "Create" tab to start a new audiobook.
+2. Navigate to the "Create" tab to start a new audiobook..
 3. Choose your input method, add content, and select a voice and background audio.
 4. Once created, your audiobook will appear in your "Library."
 5. From the library, you can publish your audiobook to the "Hub" to share it with other users.
